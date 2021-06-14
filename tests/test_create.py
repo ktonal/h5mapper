@@ -2,7 +2,7 @@ import pytest
 import numpy as np
 import pandas as pd
 
-from h5mapper.h5m import *
+from h5m import *
 
 
 class Array(Feature):

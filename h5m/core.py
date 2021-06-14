@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 import os
 from functools import partial
 
-from .crud import *
+from .crud import _add, DF_KEY, NP_KEY, PRIVATE_GRP_KEYS, SRC_KEY, ID_KEY, REF_KEY, H5_NONE
 
 
 class Feature:
