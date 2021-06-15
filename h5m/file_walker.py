@@ -1,4 +1,5 @@
 import os
+import re
 from typing import Iterable
 
 __all__ = [
@@ -6,9 +7,9 @@ __all__ = [
     "FileWalker"
 ]
 
-AUDIO_EXTENSIONS = {"wav", "aif", "aiff", "mp3", "m4a", "mp4"}
-IMAGE_EXTENSIONS = {'png', 'jpeg'}
-MIDI_EXTENSIONS = {"mid"}
+AUDIO_EXTENSIONS = r"[wav$|aif$|aiff$|mp3$|m4a$|mp4$]"
+IMAGE_EXTENSIONS = r"[png$|jpeg$]"
+MIDI_EXTENSIONS = r"mid$"
 
 EXTENSIONS = dict(audio=AUDIO_EXTENSIONS,
                   img=IMAGE_EXTENSIONS,
@@ -17,29 +18,28 @@ EXTENSIONS = dict(audio=AUDIO_EXTENSIONS,
 
 
 class FileWalker:
-    # TODO : files_ext OR regex
-    def __init__(self, files_ext, sources=None):
+
+    def __init__(self, regex, sources=None):
         """
-        recursively find files from `items` whose extensions match the ones implied in `files_ext`
+        recursively find files from `sources` whose paths match the pattern passed in `regex`
 
         Parameters
         ----------
-        files_ext : str or list of str
-            type(s) of files' extensions to be matched. Must be either 'audio' or 'midi'.
+        regex : str or re.Pattern
+            the pattern a path must match
         sources : str or iterable of str
-            a single path (string, os.Path) or an iterable of paths. Each item can either be the root of
-            a directory which will be searched recursively or a single file.
+            a single path (string, os.Path) or an iterable of paths.
+            Each item can either be the path to a single file or to a directory,
+            in which case, it will be walked recursively.
 
         Examples
         --------
-        >>> files = list(FileWalker(files_ext='midi', sources=["my-root-dir", 'piece.mid']))
+        >>> files = list(FileWalker(regex=r'.*mid$', sources=["my-root-dir", 'piece.mid']))
 
         """
-        if isinstance(files_ext, str):
-            files_ext = [files_ext]
-        if not all(ext in EXTENSIONS.keys() for ext in files_ext):
-            raise ValueError("Expected all files_ext to be one of 'audio' or 'midi'.")
-        self._matching_ext = {ext for file_type in files_ext for ext in EXTENSIONS[file_type]}
+        if isinstance(regex, str):
+            regex = [regex]
+        self._regex = re.compile(regex)
 
         generators = []
 
@@ -75,7 +75,7 @@ class FileWalker:
                 yield os.path.join(directory, file)
 
     def is_matching_file(self, filename):
-        # filter out hidden files
+        # filter out any hidden files
         if os.path.split(filename.strip("/"))[-1].startswith("."):
             return False
-        return os.path.splitext(filename)[-1].strip(".") in self._matching_ext
+        return bool(re.match(self._regex, filename))

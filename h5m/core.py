@@ -4,13 +4,14 @@ import pandas as pd
 from multiprocessing import cpu_count, Pool
 from concurrent.futures import ThreadPoolExecutor
 import os
+import re
 from functools import partial
 
 from .crud import _add, DF_KEY, NP_KEY, PRIVATE_GRP_KEYS, SRC_KEY, ID_KEY, REF_KEY, H5_NONE
 
 
 class Feature:
-    __ext__ = {"any"}
+    __re__ = r".*"
     __ds_kwargs__ = {}
 
     @property
@@ -61,8 +62,25 @@ class Proxy:
 
     @classmethod
     def from_group(cls, owner, feature, group):
+        """
+        this is the recursive method that build a Proxy hierarchy (attributes) from a live H5Group
+        
+        Parameters
+        ----------
+        owner : Database
+            the root object holding this proxy
+        feature : Feature
+            the feature that loaded this group
+        group : h5py.H5Group
+            the group corresponding to this proxy
+            
+        Returns
+        -------
+        proxy : Proxy
+            a proxy to `group` with the children attached as attributes
+        """
         # print("INSTANTIATING", group.name)
-        attrs = {k: v if v is not H5_NONE else None for k, v in group.attrs.items()}
+        attrs = {k: None if v == H5_NONE else v for k, v in group.attrs.items()}
         # we "lift up" x/__arr__ or x/__df__ to attributes named "x"
         if NP_KEY in group.keys():
             root = Proxy(owner, feature, group.name, NP_KEY, attrs)
@@ -99,7 +117,36 @@ class Proxy:
             self.kind = 'h5py'
 
     def handler(self):
+        """
+        to accommodate torch's DataLoader, handles to .h5 (pd.HDFStore or h5py.File)
+        are requested in __getitem__ and __setitem__ by proxies, but
+        to avoid I/O conflicts, they are instantiated only once by the root Database object
+         
+        Returns
+        -------
+        handle : h5py.File or pd.HDFStore
+            a handle that can read/write the data for this Proxy
+        """
         return self.owner.handler(self.kind)
+    
+    def __getitem__(self, item):
+        if self.is_group:
+            return self.getgrp(item)
+        if self.owner.keep_open:
+            return self.handler()[self.name][item]
+        with self.handler() as f:
+            rv = f[self.name][item]
+        return rv
+
+    def __setitem__(self, item, value):
+        if self.owner.keep_open:
+            self.handler()[self.name][item] = value
+        else:
+            with self.handler() as f:
+                f[self.name][item] = value
+
+    def __repr__(self):
+        return f"<Proxy {self.name}>"
 
     def getgrp(self, item):
         if isinstance(item, str):
@@ -122,25 +169,6 @@ class Proxy:
             return None
         return None
 
-    def __getitem__(self, item):
-        if self.is_group:
-            return self.getgrp(item)
-        if self.owner.keep_open:
-            return self.handler()[self.name][item]
-        with self.handler() as f:
-            rv = f[self.name][item]
-        return rv
-
-    def __setitem__(self, item, value):
-        if self.owner.keep_open:
-            self.handler()[self.name][item] = value
-        else:
-            with self.handler() as f:
-                f[self.name][item] = value
-
-    def __repr__(self):
-        return f"<Proxy {self.name}>"
-
 
 class Database:
 
@@ -151,8 +179,9 @@ class Database:
         self._f = None
         self._store = None
         with self.handler('h5py', 'r') as f:
-            # f.visit(print)
+            # build the proxies hierarchy from the top level
             for k in f.keys():
+                # if a key in a file isn't in this class, attach a base Feature
                 feature = getattr(type(self), k, setattr(self, k, Feature()))
                 self.__dict__[k] = Proxy.from_group(self, feature, f[k])
 
@@ -195,7 +224,9 @@ class Database:
             start_loc = max([i * batch_size, 0])
             end_loc = min([(i + 1) * batch_size, n_sources])
             this_sources = sources[start_loc:end_loc]
-            results = executor.map(partial(_load, schema=schema), this_sources)
+            # we use Database.load instead of cls.load because cls might be in a <locals>
+            # which Pool can not pickle...
+            results = executor.map(partial(Database.load, schema=schema), this_sources)
             # write results
             for n, res in enumerate(results):
                 for key, data in res.items():
@@ -264,28 +295,44 @@ class Database:
                 return self._store
             return pd.HDFStore(self.h5_file, mode)
 
+    @classmethod
+    def load(cls, source, schema={}):
+        """
+        extract data from a source according to a schema.
+        
+        Only Features whose `__re__` attribute matches against `source` contribute to the 
+        returned value.
+        
+        Parameters
+        ----------
+        source : str
+            
+        schema : dict
+            must have strings as keys (names of the H5 objects) and Features as values
+            
+        Returns
+        -------
+        data : dict
+            same keys as `schema`, values are the arrays, dataframes or dict returned by the Features
+        """
+        if not schema:
+            schema = {attr: val for attr, val in cls.__dict__.items() if isinstance(val, Feature)}
 
-def _load(path, schema={}):
-    """
-    extract data from a file according to a schema
-    """
-    out = {key: None for key in schema.keys()}
-
-    for f_name, f in schema.items():
-        if not getattr(type(f), 'load', Feature.load) != Feature.load:
-            # object doesn't implement load()
-            continue
-        extensions = getattr(f, '__ext__', {})
-        if hasattr(f, 'derived_from') and f.derived_from in out:
-            obj = f.load(out[f.derived_from])
-        # check that extensions matches
-        elif os.path.splitext(path)[-1].strip('.') in extensions or \
-                "any" in extensions:
-            obj = f.load(path)
-        else:
-            obj = None
-        if not isinstance(obj, (np.ndarray, pd.DataFrame, dict, type(None))):
-            raise TypeError(f"cannot write object of type {obj.__class__.__qualname__} to h5mediaset format")
-        out[f_name] = obj
-    return out
-
+        out = {key: None for key in schema.keys()}
+    
+        for f_name, f in schema.items():
+            if not getattr(type(f), 'load', Feature.load) != Feature.load:
+                # object doesn't implement load()
+                continue
+            regex = getattr(f, '__re__', r"^\b$")  # default is an impossible to match regex
+            if hasattr(f, 'derived_from') and f.derived_from in out:
+                obj = f.load(out[f.derived_from])
+            # check that regex matches
+            elif re.match(regex, source):
+                obj = f.load(source)
+            else:
+                obj = None
+            if not isinstance(obj, (np.ndarray, pd.DataFrame, dict, type(None))):
+                raise TypeError(f"cannot write object of type {obj.__class__.__qualname__} to h5mapper format")
+            out[f_name] = obj
+        return out
