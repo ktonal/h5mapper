@@ -12,11 +12,11 @@ os.remove("/tmp/__dummy.h5")
 
 DF_KEY = "__df__"
 NP_KEY = "__arr__"
-PRIVATE_GRP_KEYS = {DF_KEY, NP_KEY}
 SRC_KEY = "src"
-ID_KEY = "/id"
-REF_KEY = "/ref"
-KEYS_KEY = "/key"
+PRIVATE_GRP_KEYS = {DF_KEY, NP_KEY}
+ID_KEY = "/ids"
+REF_KEY = "/refs"
+KEYS_KEY = "/keys"
 SRC_ID_KEY = SRC_KEY + ID_KEY
 SRC_REF_KEY = SRC_KEY + REF_KEY
 SRC_KEYS_KEY = SRC_KEY + KEYS_KEY
@@ -51,7 +51,7 @@ class _add:
 
     @staticmethod
     def source_ref(h5_group, src_name, regionref=None, key=""):
-        # print(h5_group, src_name, regionref, key)
+        """populate the id, ref & key datasets of a group"""
         _add.array(h5_group, SRC_ID_KEY, np.array([src_name]),
                    dict(dtype=h5py.string_dtype(encoding='utf-8')))
         _add.array(h5_group, SRC_REF_KEY, np.array([regionref]),
@@ -61,8 +61,10 @@ class _add:
                        dict(dtype=h5py.string_dtype(encoding='utf-8')))
 
     @staticmethod
-    def source(src_name, data, group, ds_kwargs, store):
+    def source(group, src_name, data, ds_kwargs, store):
         if isinstance(data, np.ndarray):
+            # if we were to do `_add.array(group, src_name...)` we could
+            # create a dataset for each source instead of concatenating the sources immediately...
             ref = _add.array(group, NP_KEY, data, ds_kwargs)
             _add.source_ref(group, src_name, ref)
             return ref
@@ -76,21 +78,23 @@ class _add:
         elif isinstance(data, dict):
             # recurse
             for k in data.keys():
-                ref = _add.source(src_name, data[k], group.require_group(k),
+                ref = _add.source(group.require_group(k), src_name, data[k],
                                   ds_kwargs.get(k, {}), store)
                 _add.source_ref(group, src_name, ref, k)
             return null_regref
 
     @staticmethod
-    def groups(dest, groups):
-        def _update(name, obj):
-            if isinstance(obj, h5py.Group):
-                if obj.name in dest and len(dest[obj.name].keys()) != 0:
+    def groups(dest, groups, soft=True):
+        def _update(name, grp):
+            if isinstance(grp, h5py.Group):
+                # if dest has a non-empty group for this key, pass (raise Exception?)
+                if soft and grp.name in dest and len(dest[grp.name].keys()) != 0:
                     return None
-                # pop in dest only if its empty
-                if obj.name in dest:
-                    dest.pop(obj.name)
-                dest.copy(obj, obj.name)
+                # if its empty in dest or soft=False, pop in dest
+                if grp.name in dest:
+                    dest.pop(grp.name)
+                # add this group to dest
+                dest.copy(grp, grp.name)
                 return None
             return None
         for grp in groups:
