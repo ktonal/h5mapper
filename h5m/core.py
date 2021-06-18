@@ -123,7 +123,7 @@ class Proxy:
     
     def __getitem__(self, item):
         if self.is_group:
-            return self.getgrp(item)
+            return self._getgrp(item)
         if self.owner.keep_open:
             ds = self.handler()[self.name]
             if getattr(self, "asstr", False):
@@ -144,6 +144,8 @@ class Proxy:
         return rv
 
     def __setitem__(self, item, value):
+        if self.is_group:
+            return self._setgrp(item, value)
         if self.owner.keep_open:
             self.handler()[self.name][item] = value
         else:
@@ -153,26 +155,43 @@ class Proxy:
     def __repr__(self):
         return f"<Proxy {self.name}>"
 
-    def getgrp(self, item):
-        if isinstance(item, str):
+    def _getgrp(self, src: str):
+        """getitem for groups - here items are the sources' ids"""
+        if isinstance(src, str):
             # item is a source name
-            mask = self.src.ids[:] == item
+            mask = self.src.ids[:] == src
             refs, ks = self.src.refs[mask], self.src.keys[mask]
             out = {}
             for ref, k in zip(refs, ks):
-                if ref:  # only arrays have
-                    o = getattr(self, k)[ref]
+                feat = getattr(self, k)
+                if ref:  # only arrays have refs
+                    o = feat[ref]
                 else:
-                    if getattr(self, k).is_group:
-                        o = getattr(self, k)[item]
+                    if feat.is_group:
+                        o = feat[src]
                     else:  # dataframe
-                        o = getattr(self, k)[:].loc[item]
+                        o = feat[:].loc[src]
                 out[k] = o
             return out
         else:
-            raise TypeError(f"item should be of type str. Got {type(item)}")
+            raise TypeError(f"item should be of type str. Got {type(src)}")
 
-    # TODO : setgrp(self, item, value)
+    def _setgrp(self, src: str, value: dict):
+        """setitem for groups - here items are the sources' ids"""
+        if isinstance(src, str):
+            # item = source name
+            mask = self.src.ids[:] == src
+            refs, ks = self.src.refs[mask], self.src.keys[mask]
+            for ref, k in zip(refs, ks):
+                feat = getattr(self, k)
+                if ref:  # only arrays have refs
+                    # will (probably) raise some errors if one's isn't careful with shapes...
+                    feat[ref] = value[k]
+                else:
+                    # feat is either a group or df, but the call is the same
+                    feat[src] = value[k]
+        else:
+            raise TypeError(f"item should be of type str. Got {type(src)}")
 
     def add(self, source, data):
         h5f = self.owner.handler('h5py', mode="r+")
@@ -183,7 +202,7 @@ class Proxy:
 
     def get(self, source):
         if self.is_group:
-            return self.getgrp(source)
+            return self._getgrp(source)
         if self.kind == "pd":
             return self[:].loc(source)
         return self[self.refs[self.ids[()] == source]]
