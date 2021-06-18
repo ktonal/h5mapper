@@ -10,7 +10,7 @@ class Feature:
     __re__ = r".*"
     # kwargs for h5py.create_dataset
     __ds_kwargs__ = {}
-    # transforms to use on unloaded values, before returning them (?)
+    # transforms to use when unloading values
     __t__ = ()
 
     @property

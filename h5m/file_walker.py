@@ -3,18 +3,8 @@ import re
 from typing import Iterable
 
 __all__ = [
-    "EXTENSIONS",
     "FileWalker"
 ]
-
-AUDIO_EXTENSIONS = r"[wav$|aif$|aiff$|mp3$|m4a$|mp4$]"
-IMAGE_EXTENSIONS = r"[png$|jpeg$]"
-MIDI_EXTENSIONS = r"mid$"
-
-EXTENSIONS = dict(audio=AUDIO_EXTENSIONS,
-                  img=IMAGE_EXTENSIONS,
-                  midi=MIDI_EXTENSIONS,
-                  none={})
 
 
 class FileWalker:
@@ -37,23 +27,23 @@ class FileWalker:
         >>> files = list(FileWalker(regex=r'.*mid$', sources=["my-root-dir", 'piece.mid']))
 
         """
-        if isinstance(regex, str):
-            regex = [regex]
         self._regex = re.compile(regex)
+        self.sources = sources
 
+    def __iter__(self):
         generators = []
 
-        if sources is not None and isinstance(sources, Iterable):
-            if isinstance(sources, str):
-                if not os.path.exists(sources):
-                    raise FileNotFoundError("%s does not exist." % sources)
-                if os.path.isdir(sources):
-                    generators += [self.walk_root(sources)]
+        if self.sources is not None and isinstance(self.sources, Iterable):
+            if isinstance(self.sources, str):
+                if not os.path.exists(self.sources):
+                    raise FileNotFoundError("%s does not exist." % self.sources)
+                if os.path.isdir(self.sources):
+                    generators += [self.walk_root(self.sources)]
                 else:
-                    if self.is_matching_file(sources):
-                        generators += [[sources]]
+                    if self.is_matching_file(self.sources):
+                        generators += [[self.sources]]
             else:
-                for item in sources:
+                for item in self.sources:
                     if not os.path.exists(item):
                         raise FileNotFoundError("%s does not exist." % item)
                     if os.path.isdir(item):
@@ -62,20 +52,18 @@ class FileWalker:
                         if self.is_matching_file(item):
                             generators += [[item]]
 
-        self.generators = generators
-
-    def __iter__(self):
-        for generator in self.generators:
+        for generator in generators:
             for file in generator:
                 yield file
 
     def walk_root(self, root):
         for directory, _, files in os.walk(root):
-            for file in filter(self.is_matching_file, files):
-                yield os.path.join(directory, file)
+            for file in filter(self.is_matching_file,
+                               (os.path.join(directory, f) for f in files)):
+                yield file
 
     def is_matching_file(self, filename):
         # filter out any hidden files
         if os.path.split(filename.strip("/"))[-1].startswith("."):
             return False
-        return bool(re.match(self._regex, filename))
+        return bool(re.search(self._regex, filename))

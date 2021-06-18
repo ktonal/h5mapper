@@ -49,7 +49,7 @@ def _load(source, schema={}, guard_func=None):
     guard_func : optional callable
         Feature whose load is equal to ``guard_func`` are by-passed.
         Typically, `guard_func` is the method of an abstract base class.
-        
+
     Returns
     -------
     data : dict
