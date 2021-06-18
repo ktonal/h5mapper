@@ -6,9 +6,19 @@ from concurrent.futures import ThreadPoolExecutor
 import os
 from typing import Optional
 from functools import partial, reduce
+import tempfile
 
 from .features import Feature
 from .crud import _load, _add, DF_KEY, NP_KEY, PRIVATE_GRP_KEYS, SRC_KEY, ID_KEY, REF_KEY, KEYS_KEY, H5_NONE
+
+
+def as_temp(filename):
+    td = tempfile.TemporaryDirectory()
+    return os.path.join(str(td), filename)
+
+
+def in_mem(mode="w"):
+    return h5py.File("", mode, driver='core', backing_store=False)
 
 
 class Proxy:

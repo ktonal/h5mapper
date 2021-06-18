@@ -45,8 +45,11 @@ def test_find_matches(tmp_path):
     assert all(re.search(r"ext$", f) for f in found)
     assert len([f for f in found if "sub" in f]) == 2
 
+    # test multiple iter()
+    assert list(fw) == found
 
-def test_not_found_raises(tmp_path):
+
+def test_raises_on_filenotfound(tmp_path):
     (tmp_path / "sub").mkdir()
     files = [
         str(tmp_path / d / f)
@@ -68,7 +71,3 @@ def test_not_found_raises(tmp_path):
     assert not os.path.exists(faulty_path)
     with pytest.raises(FileNotFoundError):
         found = list(fw)
-
-
-def test_ignore_hidden():
-    pass

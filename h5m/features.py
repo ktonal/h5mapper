@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from functools import partial
 
@@ -41,7 +42,7 @@ class Feature:
         raise NotImplementedError
 
     def after_create(self, db, feature_key):
-        raise NotImplementedError
+        pass
 
     def __repr__(self):
         name = getattr(self, 'name', "UNK")
@@ -97,3 +98,25 @@ class Sound(Feature):
 
     __re__ = r"wav$|aif$|aiff$|mp3$|mp4$|m4a$|"
 
+
+class VShapeArray(Feature):
+
+    __t__ = (
+        lambda d: d["arr"].reshape(*d["shape"])
+    )
+
+    def __init__(self, base_feat):
+        self.base_feat = base_feat
+        # preserve the base's config
+        setattr(self, "__re__", base_feat.__re__)
+        setattr(self, "__ds_kwargs__", base_feat.__ds_kwargs__)
+        # chain the base's transform after our
+        setattr(self, "__t__", (*self.__t__, *base_feat.__t__))
+
+    @property
+    def attrs(self):
+        return self.base_feat.attrs
+
+    def load(self, source):
+        arr = self.base_feat.load(source)
+        return {"arr": arr.reshape(-1), "shape": np.array(arr.shape)}
