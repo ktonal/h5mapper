@@ -4,73 +4,11 @@ import pandas as pd
 from multiprocessing import cpu_count, Pool
 from concurrent.futures import ThreadPoolExecutor
 import os
-import re
 from typing import Optional
 from functools import partial, reduce
-import inspect
 
-from .crud import _add, DF_KEY, NP_KEY, PRIVATE_GRP_KEYS, SRC_KEY, ID_KEY, REF_KEY, KEYS_KEY, H5_NONE
-
-
-class Feature:
-    __re__ = r".*"
-    __ds_kwargs__ = {}
-    __primary__ = 'src'
-
-    @property
-    def attrs(self):
-        return {}
-
-    def __set_name__(self, owner, name):
-        self.name = name
-
-    def __get__(self, obj, objtype=None):
-        if obj is None:
-            # access from the class object
-            return self
-        # when accessed from an instance,
-        # user expects a Proxy that should already be
-        # in obj's __dict__
-        if self.name not in obj.__dict__:
-            raise RuntimeError(f"Feature '{self.name}' has not been properly attached to its parent object {obj},"
-                               " it cannot mirror any h5 object.")
-        proxy = obj.__dict__[self.name]
-        return proxy
-
-    def __set__(self, obj, value):
-        obj.__dict__[self.name] = value
-        return value
-
-    def load(self, source):
-        raise NotImplementedError
-
-    def after_create(self, db, feature_key):
-        raise NotImplementedError
-
-    def __repr__(self):
-        name = getattr(self, 'name', "UNK")
-        return f"<Feature '{name}'>"
-
-
-class Group(Feature):
-
-    def __init__(self, **features):
-        for k, v in features.items():
-            v.__set_name__(self, k)
-            setattr(self, k, v)
-        self.features = features
-
-    @property
-    def attrs(self):
-        return dict(list(item for f in self.features.values() for item in f.attrs.items()))
-
-    def load(self, source):
-        return Database.load(source, self.features)
-
-    def after_create(self, db, feature_key):
-        for feat in self.features.values():
-            if getattr(type(feat), "after_create", Feature.after_create) != Feature.after_create:
-                feat.after_create(db, feature_key + "/" + feat.name)
+from .features import Feature
+from .crud import _load, _add, DF_KEY, NP_KEY, PRIVATE_GRP_KEYS, SRC_KEY, ID_KEY, REF_KEY, KEYS_KEY, H5_NONE
 
 
 class Proxy:
@@ -180,12 +118,19 @@ class Proxy:
             ds = self.handler()[self.name]
             if getattr(self, "asstr", False):
                 ds = ds.asstr()
-            return ds[item]
+            rv = ds[item]
+            # apply the feature's transform
+            if getattr(self, "__t__", tuple()):
+                rv = reduce(lambda x, func: func(x), getattr(self, '__t__'), rv)
+            return rv
         with self.handler() as f:
             ds = f[self.name]
             if getattr(self, "asstr", False):
                 ds = ds.asstr()
             rv = ds[item]
+            # apply the feature's transform
+            if getattr(self, "__t__", tuple()):
+                rv = reduce(lambda x, func: func(x), getattr(self, '__t__'), rv)
         return rv
 
     def __setitem__(self, item, value):
@@ -216,6 +161,8 @@ class Proxy:
             return out
         else:
             raise TypeError(f"item should be of type str. Got {type(item)}")
+
+    # TODO : setgrp(self, item, value)
 
     def add(self, source, data):
         h5f = self.owner.handler('h5py', mode="r+")
@@ -374,46 +321,9 @@ class Database:
 
     @classmethod
     def load(cls, source, schema={}):
-        """
-        extract data from a source according to a schema.
-        
-        Only Features whose `__re__` attribute matches against `source` contribute to the 
-        returned value.
-        
-        Parameters
-        ----------
-        source : str
-            
-        schema : dict
-            must have strings as keys (names of the H5 objects) and Features as values
-            
-        Returns
-        -------
-        data : dict
-            same keys as `schema`, values are the arrays, dataframes or dict returned by the Features
-        """
         if not schema:
             schema = {attr: val for attr, val in cls.__dict__.items() if isinstance(val, Feature)}
-
-        out = {key: None for key in schema.keys()}
-    
-        for f_name, f in schema.items():
-            if not getattr(type(f), 'load', Feature.load) != Feature.load:
-                # object doesn't implement load()
-                out.pop(f_name)
-                continue
-            regex = getattr(f, '__re__', r"^\b$")  # default is an impossible to match regex
-            if hasattr(f, 'derived_from') and f.derived_from in out:
-                obj = f.load(out[f.derived_from])
-            # check that regex matches
-            elif re.match(regex, source):
-                obj = f.load(source)
-            else:
-                obj = None
-            if not isinstance(obj, (np.ndarray, pd.DataFrame, dict, type(None))):
-                raise TypeError(f"cannot write object of type {obj.__class__.__qualname__} to h5mapper format")
-            out[f_name] = obj
-        return out
+        return _load(source, schema, guard_func=Feature.load)
 
     def get_feat(self, name):
         name = name.strip("/").split('/')

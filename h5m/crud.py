@@ -2,11 +2,12 @@ import h5py
 import numpy as np
 import pandas as pd
 import os
+import re
 
 
 H5_NONE = h5py.Empty(np.dtype("S10"))
 with h5py.File("/tmp/__dummy.h5", 'w') as f:
-    ds = f.create_dataset('regref', shape=(1, ), dtype=h5py.regionref_dtype)
+    ds = f.create_dataset('regref', shape=(1,), dtype=h5py.regionref_dtype)
     null_regref = ds[0]
 os.remove("/tmp/__dummy.h5")
 
@@ -20,6 +21,59 @@ KEYS_KEY = "/keys"
 SRC_ID_KEY = SRC_KEY + ID_KEY
 SRC_REF_KEY = SRC_KEY + REF_KEY
 SRC_KEYS_KEY = SRC_KEY + KEYS_KEY
+
+
+def _load(source, schema={}, guard_func=None):
+    """
+    extract data from a source according to a schema.
+
+    Features whose `__re__` attribute matches against `source` contribute to the
+    returned value.
+
+    If a Feature has a string stored in an attribute `derived_from`, the single argument
+    passed to this Feature's load() method changes to being what the "source feature" returned.
+    In pseudo-code :
+        ```
+        if feature.derived_from in out.keys():
+            out[feature.name] = feature.load(out[feature.derived_from])
+        ```
+    Thus, the order of the schema matters and can be used to specify a graph of
+    loading functions.
+
+    Parameters
+    ----------
+    source : str
+        the input to be loaded (the path to a file, an url, ...)
+    schema : dict
+        must have strings as keys (names of the H5 objects) and Features as values
+    guard_func : optional callable
+        Feature whose load is equal to ``guard_func`` are by-passed.
+        Typically, `guard_func` is the method of an abstract base class.
+        
+    Returns
+    -------
+    data : dict
+        same keys as `schema`, values are the arrays, dataframes or dict returned by the Features
+    """
+    out = {key: None for key in schema.keys()}
+
+    for f_name, f in schema.items():
+        if not getattr(type(f), 'load', guard_func) != guard_func:
+            # object doesn't implement load()
+            out.pop(f_name)
+            continue
+        regex = getattr(f, '__re__', r"^\b$")  # default is an impossible to match regex
+        if hasattr(f, 'derived_from') and f.derived_from in out:
+            obj = f.load(out[f.derived_from])
+        # check that regex matches
+        elif re.match(regex, source):
+            obj = f.load(source)
+        else:
+            obj = None
+        if not isinstance(obj, (np.ndarray, pd.DataFrame, dict, type(None))):
+            raise TypeError(f"cannot write object of type {obj.__class__.__qualname__} to h5mapper format")
+        out[f_name] = obj
+    return out
 
 
 class _add:
@@ -97,5 +151,6 @@ class _add:
                 dest.copy(grp, grp.name)
                 return None
             return None
+
         for grp in groups:
             grp.visititems(_update)
