@@ -181,6 +181,9 @@ class Proxy:
         if isinstance(src, str):
             # item = source name
             mask = self.src.ids[:] == src
+            if not np.any(mask):
+                self.add(src, value)
+                return
             refs, ks = self.src.refs[mask], self.src.keys[mask]
             for ref, k in zip(refs, ks):
                 feat = getattr(self, k)
@@ -206,6 +209,15 @@ class Proxy:
         if self.kind == "pd":
             return self[:].loc(source)
         return self[self.refs[self.ids[()] == source]]
+
+    def set(self, source, data):
+        if self.is_group:
+            return self._setgrp(source, data)
+        if self.kind == "pd":
+            # todo
+            pass
+        else:
+            self[self.refs[self.ids[()] == source]] = data
 
 
 class Database:
@@ -354,6 +366,22 @@ class Database:
             schema = {attr: val for attr, val in cls.__dict__.items() if isinstance(val, Feature)}
         return _load(source, schema, guard_func=Feature.load)
 
+    def add(self, source, data):
+        h5f = self.handler('h5py', mode="r+")
+        store = self.handler("pd", mode="r+")
+        kwargs = {k: v.__ds_kwargs__ for k, v in self.__dict__.items() if isinstance(v, Proxy)}
+        ref = _add.source(h5f, source, data, kwargs, store)
+        return ref
+
+    def get(self, source):
+        return {k: v.get(source)
+                for k, v in self.__dict__.items() if isinstance(v, Proxy)}
+
+    def set(self, source, data):
+        for k, v in self.__dict__.items():
+            if isinstance(v, Proxy):
+                v[source] = data
+
     def get_feat(self, name):
         name = name.strip("/").split('/')
         return reduce(getattr, name, self)
@@ -375,3 +403,19 @@ class Database:
 
     def __repr__(self):
         return f"<Database {self.h5_file}>"
+
+    def info(self):
+        # preserve current handler state
+        h5f = h5py.File(self.h5_file, 'r')
+
+        def tostr(name):
+            parts = name.split("/")
+            s = " " * (len(parts) - 1 + len("/".join(parts[:-1]))) + parts[-1] + "/"
+            if isinstance(h5f[name], h5py.Group):
+                pass
+            else:
+                s += "  " + repr(h5f[name].shape) + "  " + repr(h5f[name].dtype)
+            print(s)
+
+        h5f.visit(tostr)
+        h5f.close()

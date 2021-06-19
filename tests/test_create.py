@@ -13,7 +13,7 @@ def check_feature_attrs(feat):
     assert feat.attrs == FeatWithAttrs().attrs
 
 
-def check_array_feature(feat):
+def check_array_proxy(feat):
     assert isinstance(feat[:], np.ndarray)
     # Proxies that should be hosted by the feature
     assert hasattr(feat, 'src') and isinstance(feat.src, Proxy)
@@ -46,17 +46,17 @@ def test_create_arrays(tmp_db):
 
     check_db(db)
     check_feature_attrs(db.x)
-    check_array_feature(db.x)
+    check_array_proxy(db.x)
 
     db = DB.create(tmp_db / "test2.h5", sources,
                    parallelism="future")
 
     check_db(db)
     check_feature_attrs(db.x)
-    check_array_feature(db.x)
+    check_array_proxy(db.x)
 
 
-def check_df_feature(feat):
+def check_df_proxy(feat):
     assert isinstance(feat[:], pd.DataFrame)
     # the 'source' Index has been added
     assert isinstance(feat[:].index.get_level_values("source"), pd.Index)
@@ -77,19 +77,19 @@ def test_create_dataframes(tmp_db):
 
     check_db(db)
     check_feature_attrs(db.x)
-    check_df_feature(db.x)
+    check_df_proxy(db.x)
 
     db = DB.create(tmp_db / "test2.h5", sources,
                    parallelism="future")
 
     check_db(db)
     check_feature_attrs(db.x)
-    check_df_feature(db.x)
+    check_df_proxy(db.x)
 
 
-def check_dict_feature(feat):
-    check_array_feature(feat.x)
-    check_df_feature(feat.y)
+def check_dict_proxy(feat):
+    check_array_proxy(feat.x)
+    check_df_proxy(feat.y)
     # Proxies that should be hosted by the feature
     assert hasattr(feat, 'src') and isinstance(feat.src, Proxy)
     assert hasattr(feat.src, 'refs') and isinstance(feat.src.refs, Proxy)
@@ -119,18 +119,18 @@ def test_create_dict(tmp_db):
 
     check_db(db)
     check_feature_attrs(db.D)
-    check_dict_feature(db.D)
+    check_dict_proxy(db.D)
 
     db = DB.create(tmp_db / "test1.h5", sources, parallelism='future')
 
     check_db(db)
     check_feature_attrs(db.D)
-    check_dict_feature(db.D)
+    check_dict_proxy(db.D)
 
 
-def check_dictofdict_feature(feat):
-    check_dict_feature(feat.p)
-    check_dict_feature(feat.q)
+def check_dictofdict_proxy(feat):
+    check_dict_proxy(feat.p)
+    check_dict_proxy(feat.q)
     # get a dict of dict of data for source "0"
     src_data = feat["0"]
     assert isinstance(src_data, dict)
@@ -146,13 +146,13 @@ def test_create_dictofdict(tmp_db):
 
     check_db(db)
     check_feature_attrs(db.D)
-    check_dictofdict_feature(db.D)
+    check_dictofdict_proxy(db.D)
 
     db = DB.create(tmp_db / "test1.h5", sources, parallelism='future')
 
     check_db(db)
     check_feature_attrs(db.D)
-    check_dictofdict_feature(db.D)
+    check_dictofdict_proxy(db.D)
 
 
 #### DERIVED ARRAY
@@ -168,8 +168,8 @@ def test_derived_array(tmp_db):
 
     check_db(db)
     check_feature_attrs(db.x)
-    check_array_feature(db.x)
-    check_array_feature(db.y)
+    check_array_proxy(db.x)
+    check_array_proxy(db.y)
     assert np.all(db.x.ids[()] == db.y.ids[()])
     # somehow they are not strictly equal...
     assert np.allclose(db.x[:], (db.y[:] - 1))

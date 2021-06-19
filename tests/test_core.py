@@ -33,3 +33,5 @@ def check_db(db):
     # can load with no schema
     rv = db.load("42")
     assert isinstance(rv, dict)
+
+    db.info()

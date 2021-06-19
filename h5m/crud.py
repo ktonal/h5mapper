@@ -4,7 +4,6 @@ import pandas as pd
 import os
 import re
 
-
 H5_NONE = h5py.Empty(np.dtype("S10"))
 with h5py.File("/tmp/__dummy.h5", 'w') as f:
     ds = f.create_dataset('regref', shape=(1,), dtype=h5py.regionref_dtype)
@@ -154,3 +153,20 @@ class _add:
 
         for grp in groups:
             grp.visititems(_update)
+
+    @staticmethod
+    def virtual_dataset(group: h5py.Group, vds_key, real_ds_keys):
+        """concatenate children of a group into a virtual dataset"""
+        shapes = np.array([group[k].shape for k in real_ds_keys])
+        assert np.all(shapes[:, 1:] == shapes[0:1, 1:])
+        layout = h5py.VirtualLayout(shape=(shapes.T[0].sum(), *shapes[0, 1:]),
+                                    dtype=group[next(iter(real_ds_keys))].dtype)
+        offset = 0
+        for k in real_ds_keys:
+            ds = group[k]
+            n = ds.shape[0]
+            vsource = h5py.VirtualSource(group.file, ds.name, ds.shape)
+            layout[offset:offset + n] = vsource
+            offset += n
+        group.create_virtual_dataset(vds_key, layout)
+

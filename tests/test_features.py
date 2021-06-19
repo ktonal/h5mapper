@@ -2,7 +2,7 @@ import pytest
 from h5m import Feature, Database, Proxy
 from h5m.features import Group
 from .test_core import check_db
-from .test_create import check_feature_attrs, check_dict_feature, \
+from .test_create import check_feature_attrs, check_dict_proxy, \
     check_after_feature
 from .utils import *
 
@@ -11,8 +11,6 @@ def test_feature_class():
     f = Feature()
     with pytest.raises(RuntimeError):
         f.load(None)
-    with pytest.raises(RuntimeError):
-        f.after_create(None, None)
 
     class NotDB(object):
         f = Feature()
@@ -78,7 +76,7 @@ def test_group(tmp_db):
     # currently, attrs are not added recursively...
     with pytest.raises(AssertionError):
         check_feature_attrs(db.g.y)
-    check_dict_feature(db.g)
+    check_dict_proxy(db.g)
     check_after_feature(db.g.after)
 
     db = DB.create(tmp_db / "test2.h5", sources,
@@ -89,5 +87,5 @@ def test_group(tmp_db):
     # currently, attrs are not added recursively...
     with pytest.raises(AssertionError):
         check_feature_attrs(db.g.x)
-    check_dict_feature(db.g)
+    check_dict_proxy(db.g)
     check_after_feature(db.g.after)
