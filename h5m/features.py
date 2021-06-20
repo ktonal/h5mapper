@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 from functools import partial
+from multiprocessing import Manager
 
 from .utils import depth_first_apply
 from .crud import _load
@@ -73,7 +74,6 @@ class Group(Feature):
 
 
 class StateDict(Feature):
-
     __re__ = r".*ckpt$"
 
     __t__ = (
@@ -90,17 +90,14 @@ class StateDict(Feature):
 
 
 class Image(Feature):
-
     __re__ = r"png$|jpeg$|"
 
 
 class Sound(Feature):
-
     __re__ = r"wav$|aif$|aiff$|mp3$|mp4$|m4a$|"
 
 
-class VShapeArray(Feature):
-
+class VShape(Feature):
     __t__ = (
         lambda d: d["arr"].reshape(*d["shape"])
     )
@@ -120,3 +117,20 @@ class VShapeArray(Feature):
     def load(self, source):
         arr = self.base_feat.load(source)
         return {"arr": arr.reshape(-1), "shape": np.array(arr.shape)}
+
+
+class Vocabulary(Feature):
+
+    def __init__(self, derived_from):
+        self.derived_from = derived_from
+        self.D = Manager().dict()
+
+    def load(self, source):
+        items = set(source)
+        self.D.update({x: i for x, i in zip(items, range(len(self.D), len(items)))})
+
+    def after_create(self, db, feature_key):
+        feat = db.get_feat(feature_key)
+        x = np.array(list(self.D.keys()))
+        i = np.array(list(self.D.values()))
+        feat.add("xi", {"x": x, "i": i})

@@ -1,9 +1,7 @@
 import pytest
-from h5m import Feature, Database, Proxy
+from h5m import *
 from h5m.features import Group
-from .test_core import check_db
-from .test_create import check_feature_attrs, check_dict_proxy, \
-    check_after_feature
+
 from .utils import *
 
 
@@ -18,6 +16,15 @@ def test_feature_class():
     o = NotDB()
     with pytest.raises(RuntimeError):
         getattr(o, "f")
+
+    class DB(Database):
+        f = Feature()
+
+    db = in_mem(DB)
+    db.add("0", {"f": np.random.randn(3, 4, 5)})
+    assert isinstance(db.f, Proxy)
+    assert getattr(db.f, "feature") is DB.f
+    assert "Proxy" in repr(db.f)
 
 
 def test_non_loading_feature(tmp_db):
@@ -71,21 +78,16 @@ def test_group(tmp_db):
     db = DB.create(tmp_db / "test1.h5", sources,
                    parallelism="mp")
 
-    check_db(db)
-    check_feature_attrs(db.g)
-    # currently, attrs are not added recursively...
-    with pytest.raises(AssertionError):
-        check_feature_attrs(db.g.y)
-    check_dict_proxy(db.g)
-    check_after_feature(db.g.after)
 
-    db = DB.create(tmp_db / "test2.h5", sources,
-                   parallelism="future")
+# TODO
+def test_state_dict():
+    pass
 
-    check_db(db)
-    check_feature_attrs(db.g)
-    # currently, attrs are not added recursively...
-    with pytest.raises(AssertionError):
-        check_feature_attrs(db.g.x)
-    check_dict_proxy(db.g)
-    check_after_feature(db.g.after)
+
+def test_vshape():
+    pass
+
+
+def test_vocabulary():
+    pass
+

@@ -20,7 +20,10 @@ class FeatWithAttrs(Feature):
 
     @property
     def attrs(self):
-        return dict(p1=self.param1, p2=self.param2, p3=self.param3)
+        return dict(param1=self.param1, param2=self.param2, param3=self.param3)
+
+    def custom_method(self, inputs):
+        return np.zeros_like(inputs)
 
 
 class Array(FeatWithAttrs):
@@ -39,7 +42,7 @@ class Dict(FeatWithAttrs):
 
     def load(self, source):
         return dict(x=np.random.randn(4, 12),
-                    y=pd.DataFrame(np.random.randn(4, 12))
+                    y=np.random.randn(4, 12)
                     )
 
 
@@ -48,10 +51,10 @@ class DictofDict(FeatWithAttrs):
     def load(self, source):
         return dict(
             p=dict(x=np.random.randn(4, 12),
-                   y=pd.DataFrame(np.random.randn(4, 12))
+                   y=np.random.randn(4, 12)
                    ),
             q=dict(x=np.random.randn(4, 12),
-                   y=pd.DataFrame(np.random.randn(4, 12))
+                   y=np.random.randn(4, 12)
                    )
         )
 
