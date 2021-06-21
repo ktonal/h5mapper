@@ -97,8 +97,12 @@ class _add:
         offset = h5_group[ds_key].shape[0]
         new = array.shape[0]
         ds = h5_group[ds_key]
-        ds.resize((offset + new, *array.shape[1:]))
-        ds[offset:offset + new] = array
+        try:
+            ds.resize((offset + new, *ds.shape[1:]))
+            ds[offset:offset + new] = array
+        except Exception as e:
+            print(h5_group, ds_key, array.shape[:], ds.shape[:])
+            raise e
         # return a ref to this array
         return ds.regionref[offset:offset + new]
 
@@ -132,8 +136,6 @@ class _add:
             # recurse
             for k in data.keys():
                 ref = _add.source(group.require_group(k), src_name, data[k],
-                                  # if no kwargs for this feature, kwargs defaults
-                                  # to the group's kwargs!
                                   ds_kwargs.get(k, {}),
                                   store)
                 _add.source_ref(group, src_name, ref, k)

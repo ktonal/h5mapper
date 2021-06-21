@@ -89,7 +89,7 @@ class Group(Feature):
                 feat.after_create(db, feature_key + "/" + feat.name)
 
 
-class StateDict(Feature):
+class TensorDict(Feature):
     __re__ = r".*ckpt$"
     __ds_kwargs__ = dict()
 
@@ -98,17 +98,20 @@ class StateDict(Feature):
         partial(depth_first_apply, func=torch.from_numpy),
     )
 
-    def __init__(self, state_dict):
-        self.keys = list(state_dict.keys())
+    def __init__(self, state_dict={}):
         self.__ds_kwargs__ = {k: dict(compression="lzf", chunks=tuple(state_dict[k].shape))
-                              for k in self.keys}
+                              for k in state_dict.keys()}
 
     @property
     def attrs(self):
         return {}
 
     def load(self, source):
-        return depth_first_apply(torch.load(source), lambda t: t.cpu().numpy())
+        return self.format(torch.load(source))
+
+    @staticmethod
+    def format(state_dict):
+        return depth_first_apply(state_dict, lambda t: np.atleast_1d(t.detach().cpu().numpy()))
 
 
 class Image(Feature):

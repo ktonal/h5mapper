@@ -23,6 +23,7 @@ def test_feature_class():
         f = Feature()
 
     db = in_mem(DB)
+    print(vars(db.f))
     db.add("0", {"f": np.random.randn(3, 4, 5)})
     assert isinstance(db.f, Proxy)
     assert getattr(db.f, "feature") is DB.f
@@ -124,7 +125,7 @@ def test_state_dict(tmp_path):
 
     class DB(Database):
         # pass the state_dict for initialization
-        sd = StateDict(net.state_dict())
+        sd = TensorDict(net.state_dict())
 
     source = [str(tmp_path / (str(i) + ".ckpt")) for i in range(3)]
 

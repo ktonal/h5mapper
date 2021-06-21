@@ -257,6 +257,9 @@ class Database:
         self._f: Optional[h5py.File] = None
         self._store: Optional[pd.HDFStore] = None
         h5f = self.handler("h5py", mode)
+        for k, val in type(self).__dict__.items():
+            if isinstance(val, Feature):
+                self.__dict__[k] = Proxy(self, val, k)
         # build the proxies hierarchy from the top level
         for k in h5f.keys():
             # if a key in a file isn't in this class, attach a base Feature
@@ -292,7 +295,7 @@ class Database:
         f.flush()
 
         # initialize ds_kwargs from schema
-        ds_kwargs = {key: getattr(feature, "__ds_kwargs__", {}) for key, feature in schema.items()}
+        ds_kwargs = {key: getattr(feature, "__ds_kwargs__", {}).copy() for key, feature in schema.items()}
         # get flavour of parallelism
         if parallelism == 'mp':
             executor = Pool(n_workers)
@@ -385,8 +388,8 @@ class Database:
         return _load(source, schema, guard_func=Feature.load)
 
     def _attach_new_children(self, data, handle):
-        new_feats = {k for k in data.keys() if k not in self.__dict__}
-        for new in new_feats:
+        # new_feats = {k for k in data.keys() if k not in self.__dict__}
+        for new in data.keys():
             feature = getattr(type(self), new, setattr(self, new, Feature()))
             proxy = Proxy.from_group(self, feature, handle[new])
             self.__dict__[new] = proxy
@@ -427,7 +430,7 @@ class Database:
 
     def info(self):
         # preserve current handler state
-        h5f = h5py.File(self.h5_file, 'r')
+        h5f = self.handler("h5py", "r")
 
         def tostr(name):
             parts = name.split("/")
@@ -438,5 +441,6 @@ class Database:
                 s += "  " + repr(h5f[name].shape) + "  " + repr(h5f[name].dtype)
             print(s)
 
+        print(self)
         h5f.visit(tostr)
         h5f.close()
