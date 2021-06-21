@@ -34,11 +34,6 @@ def test_maps_custom_h5file(custom_h5):
     h5f.close()
 
 
-def test_create():
-    # Todo
-    pass
-
-
 def test_handler(custom_h5):
     db = Database(custom_h5, "r")
     assert isinstance(db, Database)
@@ -73,7 +68,22 @@ def test_handler(custom_h5):
     rv = db.load("42")
     assert isinstance(rv, dict)
 
+    assert "Database" in repr(db)
+
     db.info()
+
+
+def test_crud_api(custom_h5):
+    db = Database(custom_h5, "r+")
+    db.add("0", {
+        # new feature
+        "g3": {"d3": np.random.randn(1, 100)},
+
+    })
+    db.flush()
+    got = db.get("0")
+    assert "g3" in got
+    assert isinstance(db.g3, Proxy)
 
 
 def test_in_mem():

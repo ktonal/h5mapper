@@ -32,6 +32,17 @@ class Array(FeatWithAttrs):
         return np.random.randn(4, 12)
 
 
+class IntVector(FeatWithAttrs):
+    def load(self, source):
+        return np.random.randint(0, 32, (1, 8, ))
+
+
+class ArrayWithT(Array):
+    __t__ = (
+        lambda arr: arr.flat[:],
+    )
+
+
 class DF(FeatWithAttrs):
 
     def load(self, source):

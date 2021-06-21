@@ -65,7 +65,7 @@ def _load(source, schema={}, guard_func=None):
         if hasattr(f, 'derived_from') and f.derived_from in out:
             obj = f.load(out[f.derived_from])
         # check that regex matches
-        elif re.match(regex, source):
+        elif re.search(regex, source):
             obj = f.load(source)
         else:
             obj = None
@@ -132,7 +132,10 @@ class _add:
             # recurse
             for k in data.keys():
                 ref = _add.source(group.require_group(k), src_name, data[k],
-                                  ds_kwargs.get(k, {}), store)
+                                  # if no kwargs for this feature, kwargs defaults
+                                  # to the group's kwargs!
+                                  ds_kwargs.get(k, {}),
+                                  store)
                 _add.source_ref(group, src_name, ref, k)
             return null_regref
 
@@ -154,19 +157,19 @@ class _add:
         for grp in groups:
             grp.visititems(_update)
 
-    @staticmethod
-    def virtual_dataset(group: h5py.Group, vds_key, real_ds_keys):
-        """concatenate children of a group into a virtual dataset"""
-        shapes = np.array([group[k].shape for k in real_ds_keys])
-        assert np.all(shapes[:, 1:] == shapes[0:1, 1:])
-        layout = h5py.VirtualLayout(shape=(shapes.T[0].sum(), *shapes[0, 1:]),
-                                    dtype=group[next(iter(real_ds_keys))].dtype)
-        offset = 0
-        for k in real_ds_keys:
-            ds = group[k]
-            n = ds.shape[0]
-            vsource = h5py.VirtualSource(group.file, ds.name, ds.shape)
-            layout[offset:offset + n] = vsource
-            offset += n
-        group.create_virtual_dataset(vds_key, layout)
+    # @staticmethod
+    # def virtual_dataset(group: h5py.Group, vds_key, real_ds_keys):
+    #     """concatenate children of a group into a virtual dataset"""
+    #     shapes = np.array([group[k].shape for k in real_ds_keys])
+    #     assert np.all(shapes[:, 1:] == shapes[0:1, 1:])
+    #     layout = h5py.VirtualLayout(shape=(shapes.T[0].sum(), *shapes[0, 1:]),
+    #                                 dtype=group[next(iter(real_ds_keys))].dtype)
+    #     offset = 0
+    #     for k in real_ds_keys:
+    #         ds = group[k]
+    #         n = ds.shape[0]
+    #         vsource = h5py.VirtualSource(group.file, ds.name, ds.shape)
+    #         layout[offset:offset + n] = vsource
+    #         offset += n
+    #     group.create_virtual_dataset(vds_key, layout)
 

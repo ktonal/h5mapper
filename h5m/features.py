@@ -1,3 +1,4 @@
+import h5py
 import numpy as np
 import torch
 from functools import partial
@@ -12,8 +13,10 @@ class Feature:
     __re__ = r".*"
     # kwargs for h5py.create_dataset
     __ds_kwargs__ = {}
-    # transforms to use when unloading values
+    # transforms to use at the array level
     __t__ = ()
+    # transforms at the group level
+    __grp_t__ = ()
 
     @property
     def attrs(self):
@@ -49,6 +52,19 @@ class Feature:
         name = getattr(self, 'name', "UNK")
         return f"<Feature '{name}'>"
 
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        if "__t__" in state:
+            state.pop("__t__")
+        if "__grp_t__" in state:
+            state.pop("__grp_t__")
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self.__dict__.update({"__t__": type(self).__t__})
+        self.__dict__.update({"__grp_t__": type(self).__grp_t__})
+
 
 class Group(Feature):
 
@@ -75,11 +91,17 @@ class Group(Feature):
 
 class StateDict(Feature):
     __re__ = r".*ckpt$"
+    __ds_kwargs__ = dict()
 
-    __t__ = (
+    __grp_t__ = (
         # getting a dict returns it filled with tensors
-        partial(depth_first_apply, func=torch.from_numpy)
+        partial(depth_first_apply, func=torch.from_numpy),
     )
+
+    def __init__(self, state_dict):
+        self.keys = list(state_dict.keys())
+        self.__ds_kwargs__ = {k: dict(compression="lzf", chunks=tuple(state_dict[k].shape))
+                              for k in self.keys}
 
     @property
     def attrs(self):
@@ -91,6 +113,9 @@ class StateDict(Feature):
 
 class Image(Feature):
     __re__ = r"png$|jpeg$|"
+    __ds_kwargs__ = dict(
+        dtype=np.dtype("uint8"),
+    )
 
 
 class Sound(Feature):
@@ -98,8 +123,8 @@ class Sound(Feature):
 
 
 class VShape(Feature):
-    __t__ = (
-        lambda d: d["arr"].reshape(*d["shape"])
+    __grp_t__ = (
+        lambda d: d["arr"].reshape(*d["_shape"]),
     )
 
     def __init__(self, base_feat):
@@ -108,7 +133,7 @@ class VShape(Feature):
         setattr(self, "__re__", base_feat.__re__)
         setattr(self, "__ds_kwargs__", base_feat.__ds_kwargs__)
         # chain the base's transform after our
-        setattr(self, "__t__", (*self.__t__, *base_feat.__t__))
+        setattr(self, "__grp_t__", (*self.__grp_t__, *base_feat.__grp_t__))
 
     @property
     def attrs(self):
@@ -116,21 +141,25 @@ class VShape(Feature):
 
     def load(self, source):
         arr = self.base_feat.load(source)
-        return {"arr": arr.reshape(-1), "shape": np.array(arr.shape)}
+        return {"arr": arr.reshape(-1), "_shape": np.array(arr.shape)}
 
 
 class Vocabulary(Feature):
 
     def __init__(self, derived_from):
         self.derived_from = derived_from
-        self.D = Manager().dict()
+        self.V = Manager().dict()
 
     def load(self, source):
-        items = set(source)
-        self.D.update({x: i for x, i in zip(items, range(len(self.D), len(items)))})
+        if isinstance(source, np.ndarray):
+            source = source.flat[:]
+        items = {*source}
+        self.V.update({x: i for x, i in zip(items, range(len(self.V), len(items)))})
 
     def after_create(self, db, feature_key):
         feat = db.get_feat(feature_key)
-        x = np.array(list(self.D.keys()))
-        i = np.array(list(self.D.values()))
+        x = np.array(list(self.V.keys()))
+        i = np.array(list(self.V.values()))
+        # source "xi" is the dictionary
         feat.add("xi", {"x": x, "i": i})
+        self.V = dict(self.V)

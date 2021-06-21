@@ -76,7 +76,7 @@ def test_proxy_api(dict_db, keep_open):
     with pytest.raises(TypeError):
         null = feat[0]
     with pytest.raises(TypeError):
-        null = feat[0:8]
+        feat[0:8] = {}
     with pytest.raises(TypeError):
         null = feat[["3", "5", "7"]]
 
@@ -95,6 +95,14 @@ def test_proxy_api(dict_db, keep_open):
     feat.set("0", before)
     check_handler(feat, keep_open)
     assert np.allclose(feat["0"]["x"], before["x"])
+
+    # set new id
+
+    before = feat["0"]
+    before.update({"x": before["x"] + 1})
+    feat.set("10", before)
+    check_handler(feat, keep_open)
+    assert np.allclose(feat["10"]["x"], before["x"])
 
     # ADD item
     val = Dict().load(None)

@@ -63,13 +63,13 @@ class Proxy:
         else:
             root = Proxy(owner, feature, group.name, "", attrs)
         if SRC_KEY in group.keys():
-            refs = Proxy(owner, feature, group.name + "/" + SRC_KEY, REF_KEY)
-            ids = Proxy(owner, feature, group.name + "/" + SRC_KEY, ID_KEY)
+            refs = Proxy(owner, None, group.name + "/" + SRC_KEY, REF_KEY)
+            ids = Proxy(owner, None, group.name + "/" + SRC_KEY, ID_KEY)
             # print("ATTACHING", "refs, ids", "TO", root)
             setattr(root, "refs", refs)
             setattr(root, "ids", ids)
             if KEYS_KEY.strip("/") in group[SRC_KEY].keys():
-                keys = Proxy(owner, feature, group.name + "/" + SRC_KEY, KEYS_KEY)
+                keys = Proxy(owner, None, group.name + "/" + SRC_KEY, KEYS_KEY)
                 setattr(root, "keys", keys)
                 # print("ATTACHING", "keys", "TO", root)
         # dataframes groups do not host their children
@@ -81,7 +81,11 @@ class Proxy:
                 child = Proxy.from_group(owner, feature, group[k])
             else:
                 attrs = {k: None if v == H5_NONE else v for k, v in group[k].attrs.items()}
-                child = Proxy(owner, feature, group.name, "/"+k, attrs)
+                child = Proxy(owner,
+                              None if any(k in reserved
+                                          for reserved in [REF_KEY, ID_KEY, KEYS_KEY])
+                              else feature,
+                              group.name, "/"+k, attrs)
             # print("ATTACHING", k, child, "TO", root)
             setattr(root, k, child)
         return root
@@ -161,6 +165,9 @@ class Proxy:
         """getitem for groups - here items are the sources' ids"""
         # item is a source name
         if isinstance(src, str):
+            if not hasattr(self, "src"):
+                # not a h5m Group
+                return {}
             # if we were to store the indices of the ids, we wouldn't have
             # to read them all every time...
             mask = self.src.ids[:] == src
@@ -176,6 +183,8 @@ class Proxy:
                     else:  # dataframe
                         o = feat[:].loc[src]
                 out[k] = o
+            if getattr(self, "__grp_t__", tuple()):
+                out = reduce(lambda x, func: func(x), getattr(self, '__grp_t__'), out)
             return out
         else:
             raise TypeError(f"item should be of type str. Got {type(src)}")
@@ -183,6 +192,9 @@ class Proxy:
     def _setgrp(self, src: str, value: dict):
         """setitem for groups - here items are the sources' ids"""
         if isinstance(src, str):
+            if not hasattr(self, "src"):
+                # not a h5m Group
+                return
             # item = source name
             mask = self.src.ids[:] == src
             if not np.any(mask):
@@ -197,9 +209,9 @@ class Proxy:
                 else:
                     # feat is either a group or df, but the call is the same
                     feat[src] = value[k]
+            self._attach_new_children(value)
         else:
             raise TypeError(f"item should be of type str. Got {type(src)}")
-        self._attach_new_children(value)
 
     def _attach_new_children(self, data):
         new_feats = {k for k in data.keys() if not getattr(self, k, False)}
@@ -287,6 +299,8 @@ class Database:
         elif parallelism == 'future':
             executor = ThreadPoolExecutor(n_workers)
         else:
+            f.close()
+            store.close()
             raise ValueError(f"parallelism must be one of ['mp', 'future']. Got '{parallelism}'")
 
         # run loading routine
@@ -337,23 +351,11 @@ class Database:
         has_changed = {}
         for key, feature in schema.items():
             if getattr(type(feature), "after_create", Feature.after_create) != Feature.after_create:
-                data = feature.after_create(db, key)
-                if isinstance(data, np.ndarray):
-                    _add.array(groups[key], key + '/data', data, ds_kwargs[key])
-                    # no source ref...
-                    f.flush()
-                elif isinstance(data, pd.DataFrame):
-                    data.to_hdf(store, key, mode='a', append=False, format='table')
-                    store.flush()
-                    has_changed[key] = True
+                feature.after_create(db, key)
+                f.flush()
+                store.flush()
 
         store.close()
-        # copy dataframes to master file one more time
-        tmp = h5py.File("/tmp/h5m-store.h5", 'r')
-        _add.groups(f, [tmp[k] for k in has_changed.keys()])
-        tmp.close()
-        f.flush()
-        f.close()
         os.remove("/tmp/h5m-store.h5")
         # voila!
         return cls(h5_file, mode if mode != 'w' else "r+", keep_open)
@@ -386,12 +388,13 @@ class Database:
         new_feats = {k for k in data.keys() if k not in self.__dict__}
         for new in new_feats:
             feature = getattr(type(self), new, setattr(self, new, Feature()))
-            self.__dict__[new] = Proxy.from_group(self, feature, handle[new])
+            proxy = Proxy.from_group(self, feature, handle[new])
+            self.__dict__[new] = proxy
 
     def add(self, source, data):
         h5f = self.handler('h5py', mode="r+" if self.mode not in ("w", "r+", "a") else self.mode)
         store = None
-        kwargs = {k: v.__ds_kwargs__ for k, v in self.__dict__.items() if isinstance(v, Proxy)}
+        kwargs = {k: getattr(v, "__ds_kwargs__", {}) for k, v in self.__dict__.items() if isinstance(v, Proxy)}
         ref = _add.source(h5f, source, data, kwargs, store)
         self._attach_new_children(data, h5f)
         return ref
