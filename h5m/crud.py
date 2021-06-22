@@ -97,25 +97,25 @@ class _add:
         offset = h5_group[ds_key].shape[0]
         new = array.shape[0]
         ds = h5_group[ds_key]
-        try:
-            ds.resize((offset + new, *ds.shape[1:]))
-            ds[offset:offset + new] = array
-        except Exception as e:
-            print(h5_group, ds_key, array.shape[:], ds.shape[:])
-            raise e
+        ds.resize((offset + new, *ds.shape[1:]))
+        ds[offset:offset + new] = array
         # return a ref to this array
         return ds.regionref[offset:offset + new]
 
     @staticmethod
     def source_ref(h5_group, src_name, regionref=None, key=""):
         """populate the id, ref & key datasets of a group"""
-        _add.array(h5_group, SRC_ID_KEY, np.array([src_name]),
-                   dict(dtype=h5py.string_dtype(encoding='utf-8')))
+        # _add.array(h5_group, SRC_ID_KEY, np.array([src_name]),
+        #            dict(dtype=h5py.string_dtype(encoding='utf-8')))
         _add.array(h5_group, SRC_REF_KEY, np.array([regionref]),
                    dict(dtype=h5py.regionref_dtype))
         if key:
             _add.array(h5_group, SRC_KEYS_KEY, np.array([key]),
                        dict(dtype=h5py.string_dtype(encoding='utf-8')))
+        # group/src.attrs hold the set of ids mapped to the lists of indices in
+        # group/src/[refs, keys] they correspond to.
+        pkeys = h5_group[SRC_KEY].attrs
+        pkeys.create(src_name, [*pkeys.get(src_name, []), h5_group[SRC_REF_KEY].shape[0]-1])
 
     @staticmethod
     def source(group, src_name, data, ds_kwargs, store):

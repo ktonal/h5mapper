@@ -38,7 +38,7 @@ class Dataset(h5m.Database, torch.utils.data.Dataset):
 
     def __len__(self):
         # the number of sources we loaded :
-        return self.data.x.ids.shape[0]
+        return len(self.data.ids)
 
 
 # While consuming `train`, we will write to `logs` :
@@ -65,7 +65,7 @@ class ExerimentData(h5m.Database):
 
         # because of the ".", we have to use get_feat() - or getattr(self.ckpts, "fc1.weight")
         w = self.get_feat("ckpts/fc1.weight")
-        epochs = w.ids[()]
+        epochs = w.ids
         f, axs = plt.subplots(1, len(epochs))
         for i, ep in enumerate(epochs):
             axs[i].imshow(w.get(ep))
@@ -79,6 +79,7 @@ class ExerimentData(h5m.Database):
 # build the dataset from sources (no split for simplicity...)
 sources = [str(i) for i in range(200)]
 train = Dataset.create("train.h5", sources, "w", keep_open=True)
+train.info()
 
 net = Net()
 if torch.cuda.is_available():

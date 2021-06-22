@@ -34,6 +34,10 @@ class Proxy:
             raise AttributeError(f"object of type {self.__class__.__qualname__} has no attribute '{attr}'")
         return val
 
+    @property
+    def _attrs(self):
+        return self.handler()[self.group_name].attrs
+
     @classmethod
     def from_group(cls, owner, feature, group):
         """
@@ -54,7 +58,8 @@ class Proxy:
             a proxy to `group` with the children attached as attributes
         """
         # print("INSTANTIATING", group.name)
-        attrs = {k: None if v == H5_NONE else v for k, v in group.attrs.items()}
+        attrs = {k: None if not isinstance(v, np.ndarray) and v == H5_NONE else v
+                 for k, v in group.attrs.items()}
         # we "lift up" x/__arr__ or x/__df__ to attributes named "x"
         if NP_KEY in group.keys():
             root = Proxy(owner, feature, group.name, NP_KEY, attrs)
@@ -64,7 +69,8 @@ class Proxy:
             root = Proxy(owner, feature, group.name, "", attrs)
         if SRC_KEY in group.keys():
             refs = Proxy(owner, None, group.name + "/" + SRC_KEY, REF_KEY)
-            ids = Proxy(owner, None, group.name + "/" + SRC_KEY, ID_KEY)
+            # ids = Proxy(owner, None, group.name + "/" + SRC_KEY, ID_KEY)
+            ids = list(group[SRC_KEY].attrs.keys())
             # print("ATTACHING", "refs, ids", "TO", root)
             setattr(root, "refs", refs)
             setattr(root, "ids", ids)
@@ -85,7 +91,7 @@ class Proxy:
                               None if any(k in reserved
                                           for reserved in [REF_KEY, ID_KEY, KEYS_KEY])
                               else feature,
-                              group.name, "/"+k, attrs)
+                              group.name, "/" + k, attrs)
             # print("ATTACHING", k, child, "TO", root)
             setattr(root, k, child)
         return root
@@ -126,7 +132,7 @@ class Proxy:
             a handle that can read/write the data for this Proxy
         """
         return self.owner.handler(self.kind, mode)
-    
+
     def __getitem__(self, item):
         if self.is_group:
             return self._getgrp(item)
@@ -168,9 +174,9 @@ class Proxy:
             if not hasattr(self, "src"):
                 # not a h5m Group
                 return {}
-            # if we were to store the indices of the ids, we wouldn't have
-            # to read them all every time...
-            mask = self.src.ids[:] == src
+            # we store the map ids <-> indices for refs and keys
+            # in the src.attrs of the feature
+            mask = self.src._attrs[src]
             refs, ks = self.src.refs[mask], self.src.keys[mask]
             out = {}
             for ref, k in zip(refs, ks):
@@ -196,7 +202,7 @@ class Proxy:
                 # not a h5m Group
                 return
             # item = source name
-            mask = self.src.ids[:] == src
+            mask = self.src._attrs.get(src, [])
             if not np.any(mask):
                 self.add(src, value)
                 return
@@ -235,7 +241,7 @@ class Proxy:
             return self._getgrp(source)
         if self.kind == "pd":
             return self[:].loc(source)
-        return self[self.refs[self.ids[()] == source][0]]
+        return self[self.refs[self.src._attrs[source][0]]]
 
     def set(self, source, data):
         if self.is_group:
@@ -244,7 +250,7 @@ class Proxy:
             # todo
             raise NotImplementedError
         else:
-            self[self.refs[self.ids[()] == source][0]] = data
+            self[self.refs[self.src._attrs[source][0]]] = data
 
 
 class Database:
@@ -436,7 +442,8 @@ class Database:
             parts = name.split("/")
             s = " " * (len(parts) - 1 + len("/".join(parts[:-1]))) + parts[-1] + "/"
             if isinstance(h5f[name], h5py.Group):
-                pass
+                if SRC_KEY in name:
+                    s += f"  ({len(h5f[name].attrs.keys())} ids)"
             else:
                 s += "  " + repr(h5f[name].shape) + "  " + repr(h5f[name].dtype)
             print(s)
