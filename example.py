@@ -21,6 +21,13 @@ class Net(nn.Module):
 
 # fake feature that simulate loading an example and a label from a source
 class Example(h5m.Feature):
+
+    # set some of the h5py.Dataset properties for each sub feature
+    __ds_kwargs__ = dict(
+        x=dict(chunks=(32,), compression="lzf"),
+        label=dict(chunks=(1,))
+    )
+
     def load(self, source):
         return dict(
             x=np.random.randn(32).astype(np.float32),
@@ -34,7 +41,7 @@ class Dataset(h5m.Database, torch.utils.data.Dataset):
 
     def __getitem__(self, item):
         # returns dict : {"x": ..., "label": ...}
-        return self.data.get(str(item))
+        return self.data.get(self.data.ids[item])
 
     def __len__(self):
         # the number of sources we loaded :
@@ -76,6 +83,8 @@ class ExerimentData(h5m.Database):
 
 # now the script
 
+MAX_EPOCHS = 30
+
 # build the dataset from sources (no split for simplicity...)
 sources = [str(i) for i in range(200)]
 train = Dataset.create("train.h5", sources, "w", keep_open=True)
@@ -85,15 +94,19 @@ net = Net()
 if torch.cuda.is_available():
     net = net.to("cuda")
 opt = torch.optim.Adam(net.parameters())
-loader = torch.utils.data.DataLoader(train, num_workers=8,
+loader = torch.utils.data.DataLoader(train, num_workers=4,
                                      shuffle=True,
                                      batch_size=16, pin_memory=True)
+n_batches = len(loader)
+
 # create the logs
 logs = ExerimentData("logs.h5", mode="w", keep_open=True)
 
+logs.add("train", {"loss": np.zeros(MAX_EPOCHS * n_batches),
+                   "acc": np.zeros(MAX_EPOCHS * n_batches)})
 
 # here we go!
-for epoch in tqdm(range(30)):
+for epoch in tqdm(range(MAX_EPOCHS)):
     for i, batch in enumerate(loader):
         x, labels = batch["x"], batch["label"]
         if torch.cuda.is_available():
@@ -105,16 +118,15 @@ for epoch in tqdm(range(30)):
         L.backward()
         opt.step()
         acc = (out.max(dim=-1).indices == labels.squeeze()).sum() / labels.size(0)
-        # TensorDict.format(...) converts a dict of tensors to a dict of arrays
-        log = h5m.TensorDict.format({"loss": L, "acc": acc})
-        logs.add(f"epoch={epoch} - batch={i}", log)
+        # set indices within the region "train"
+        logs.loss.iset("train", epoch * n_batches + i, L.detach().item())
+        logs.acc.iset("train", epoch * n_batches + i, acc.detach().item())
 
     if (epoch + 1) % 10 == 0:
         # log checkpoints
         logs.add(str(epoch), {"ckpts": logs.ckpts.format(net.state_dict())})
         # flush every 10 epochs...
         logs.flush()
-
 
 logs.report()
 

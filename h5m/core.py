@@ -184,6 +184,7 @@ class Proxy:
         """setitem for groups - here items are the sources' ids"""
         if isinstance(src, str):
             if not hasattr(self, "src"):
+                print("no SRC")
                 # not a h5m Group
                 return
             # item = source name
@@ -229,6 +230,18 @@ class Proxy:
             return self._setgrp(source, data)
         else:
             self[self.refs[self.src._attrs[source][0]]] = data
+
+    def iset(self, source, idx, data):
+        if self.is_group:
+            # print("ISET GRP")
+            return self._setgrp(source, data)
+        else:
+            ds = self.handler()[self.name]
+            ref = self.refs[self.src._attrs[source][0]]
+            # get the MultiBlockSlice behind the regionref :
+            mbs = h5py.h5r.get_region(ref, ds.id).get_regular_hyperslab()
+            # mbs[0][0] is the first index of the first axis of the region
+            ds[mbs[0][0] + idx] = data
 
 
 class Database:
