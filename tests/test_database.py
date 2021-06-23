@@ -40,29 +40,23 @@ def test_handler(custom_h5):
     copy = Database(db.h5_file)
     copy.keep_open = True
     # check that there is only one handler that stays open
-    h1 = copy.handler('h5py', 'r')
-    h2 = copy.handler('h5py', 'r')
-    s1 = copy.handler('pd', 'r')
-    s2 = copy.handler('pd', 'r')
-    assert h1 is h2 and s1 is s2
+    h1 = copy.handler('r')
+    h2 = copy.handler('r')
+    assert h1 is h2
     copy.close()
     # handle should now be closed
-    assert not h1 and not s1.is_open
+    assert not h1
 
     copy.keep_open = False
     # check that there is multiple handler
-    h1 = copy.handler('h5py', 'r')
-    h2 = copy.handler('h5py', 'r')
-    s1 = copy.handler('pd', 'r')
-    s2 = copy.handler('pd', 'r')
-    assert h1 is not h2 and s1 is not s2
+    h1 = copy.handler('r')
+    h2 = copy.handler('r')
+    assert h1 is not h2
     copy.close()
     # should not affect handlers
-    assert h1 and h2 and s1.is_open and s2.is_open
+    assert h1 and h2
     h1.close()
     h2.close()
-    s1.close()
-    s2.close()
 
     # can load with no schema
     rv = db.load("42")

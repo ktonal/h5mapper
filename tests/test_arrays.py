@@ -30,13 +30,11 @@ def test_proxy_attributes(array_db):
 
     assert feat.owner is array_db
     assert not feat.is_group
-    assert feat.kind == "h5py"
     assert hasattr(feat, "shape") and isinstance(feat.shape, tuple)
 
     # Proxies that should be hosted by the feature
     assert hasattr(feat, 'src') and isinstance(feat.src, Proxy)
     assert hasattr(feat, 'refs') and isinstance(feat.refs, Proxy)
-    # assert hasattr(feat, 'ids') and isinstance(feat.ids, Proxy)
 
     # methods that should be available to the proxy
     assert feat.custom_method is not None
@@ -46,10 +44,10 @@ def test_proxy_attributes(array_db):
     # check that keeping the db open issues only one handler
     feat.owner.keep_open = True
     hf = feat.handler()
-    assert hf is feat.owner.handler(feat.kind, 'r')
+    assert hf is feat.owner.handler('r')
     # should now be opened
     assert isinstance(feat[:], np.ndarray)
-    assert hf is feat.owner.handler(feat.kind, 'r')
+    assert hf is feat.owner.handler('r')
     hf.close()
     assert not feat.owner._f
     feat.owner.keep_open = False

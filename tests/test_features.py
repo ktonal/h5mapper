@@ -96,7 +96,7 @@ def test_group(tmp_db):
     class DB(Database):
         g = Group(
             x=Array(),
-            y=DF(),
+            y=Array(),
             after=AfterFeature()
         )
 
@@ -140,7 +140,7 @@ def test_state_dict(tmp_path):
     assert isinstance(net, Net)
 
     # all weights are stored with compression
-    grp = db.handler("h5py", None)[db.sd.name]
+    grp = db.handler(None)[db.sd.name]
 
     def is_compressed(name, obj):
         if isinstance(obj, h5py.Dataset) and "__arr__" in name:

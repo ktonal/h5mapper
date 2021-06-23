@@ -10,10 +10,9 @@ with h5py.File("/tmp/__dummy.h5", 'w') as f:
     null_regref = ds[0]
 os.remove("/tmp/__dummy.h5")
 
-DF_KEY = "__df__"
 NP_KEY = "__arr__"
 SRC_KEY = "src"
-PRIVATE_GRP_KEYS = {DF_KEY, NP_KEY}
+PRIVATE_GRP_KEYS = {NP_KEY}
 ID_KEY = "/ids"
 REF_KEY = "/refs"
 KEYS_KEY = "/keys"
@@ -69,7 +68,7 @@ def _load(source, schema={}, guard_func=None):
             obj = f.load(source)
         else:
             obj = None
-        if not isinstance(obj, (np.ndarray, pd.DataFrame, dict, type(None))):
+        if not isinstance(obj, (np.ndarray, dict, type(None))):
             raise TypeError(f"cannot write object of type {obj.__class__.__qualname__} to h5mapper format")
         out[f_name] = obj
     return out
@@ -104,7 +103,7 @@ class _add:
 
     @staticmethod
     def source_ref(h5_group, src_name, regionref=None, key=""):
-        """populate the id, ref & key datasets of a group"""
+        """populate the ref & key datasets of a group"""
         # _add.array(h5_group, SRC_ID_KEY, np.array([src_name]),
         #            dict(dtype=h5py.string_dtype(encoding='utf-8')))
         _add.array(h5_group, SRC_REF_KEY, np.array([regionref]),
@@ -118,46 +117,38 @@ class _add:
         pkeys.create(src_name, [*pkeys.get(src_name, []), h5_group[SRC_REF_KEY].shape[0]-1])
 
     @staticmethod
-    def source(group, src_name, data, ds_kwargs, store):
+    def source(group, src_name, data, ds_kwargs, ):
         if isinstance(data, np.ndarray):
             # if we were to do `_add.array(group, src_name...)` we could
             # create a dataset for each source instead of concatenating the sources immediately...
             ref = _add.array(group, NP_KEY, data, ds_kwargs)
             _add.source_ref(group, src_name, ref)
             return ref
-        elif isinstance(data, pd.DataFrame):
-            mi = pd.MultiIndex.from_tuples(zip([src_name] * len(data), data.index), names=["source", ''])
-            data = pd.DataFrame(data.reset_index(drop=True).values, index=mi)
-            data.to_hdf(store, group.name + "/" + DF_KEY, mode='a', append=True, format="table",
-                        # min string size
-                        min_itemsize=512)
-            return null_regref
         elif isinstance(data, dict):
             # recurse
             for k in data.keys():
                 ref = _add.source(group.require_group(k), src_name, data[k],
-                                  ds_kwargs.get(k, {}),
-                                  store)
+                                  ds_kwargs.get(k, {}))
                 _add.source_ref(group, src_name, ref, k)
             return null_regref
 
-    @staticmethod
-    def groups(dest, groups, soft=True):
-        def _update(name, grp):
-            if isinstance(grp, h5py.Group):
-                # if dest has a non-empty group for this key, pass (raise Exception?)
-                if soft and grp.name in dest and len(dest[grp.name].keys()) != 0:
-                    return None
-                # if its empty in dest or soft=False, pop in dest
-                if grp.name in dest:
-                    dest.pop(grp.name)
-                # add this group to dest
-                dest.copy(grp, grp.name)
-                return None
-            return None
-
-        for grp in groups:
-            grp.visititems(_update)
+    # @staticmethod
+    # def groups(dest, groups, soft=True):
+    #     def _update(name, grp):
+    #         if isinstance(grp, h5py.Group):
+    #             # if dest has a non-empty group for this key, pass (raise Exception?)
+    #             if soft and grp.name in dest and len(dest[grp.name].keys()) != 0:
+    #                 return None
+    #             # if its empty in dest or soft=False, pop in dest
+    #             if grp.name in dest:
+    #                 dest.pop(grp.name)
+    #             # add this group to dest
+    #             dest.copy(grp, grp.name)
+    #             return None
+    #         return None
+    #
+    #     for grp in groups:
+    #         grp.visititems(_update)
 
     # @staticmethod
     # def virtual_dataset(group: h5py.Group, vds_key, real_ds_keys):
@@ -174,4 +165,3 @@ class _add:
     #         layout[offset:offset + n] = vsource
     #         offset += n
     #     group.create_virtual_dataset(vds_key, layout)
-

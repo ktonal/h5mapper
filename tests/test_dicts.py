@@ -30,12 +30,10 @@ def test_proxy_attributes(dict_db):
 
     assert feat.owner is dict_db
     assert feat.is_group
-    assert feat.kind == "h5py"
 
     # Proxies that should be hosted by the feature
     assert hasattr(feat, 'src') and isinstance(feat.src, Proxy)
     assert hasattr(feat, 'refs') and isinstance(feat.refs, Proxy)
-    # assert hasattr(feat, 'ids') and isinstance(feat.ids, Proxy)
     assert hasattr(feat, 'x') and isinstance(feat.x, Proxy)
     assert hasattr(feat, 'y') and isinstance(feat.y, Proxy)
 
@@ -47,10 +45,10 @@ def test_proxy_attributes(dict_db):
     # check that keeping the db open issues only one handler
     feat.owner.keep_open = True
     hf = feat.handler()
-    assert hf is feat.owner.handler(feat.kind, 'r')
+    assert hf is feat.owner.handler('r')
     # should now be opened
     assert isinstance(feat["0"], dict)
-    assert hf is feat.owner.handler(feat.kind, 'r')
+    assert hf is feat.owner.handler('r')
     hf.close()
     assert not feat.owner._f
     feat.owner.keep_open = False
@@ -122,7 +120,7 @@ def test_proxy_api(dict_db, keep_open):
     check_handler(feat, keep_open)
     assert hasattr(feat, "z") and isinstance(feat.z, Proxy)
     check_handler(feat, keep_open)
-    print(list(dict_db.handler("h5py")["d/src"].attrs.keys()), feat.src.attrs.keys())
+
 
 @pytest.fixture
 def dict_of_dict_db(tmp_db):
@@ -143,7 +141,6 @@ def test_dictofdict_attributes(dict_of_dict_db):
 
     assert feat.owner is dict_of_dict_db
     assert feat.is_group
-    assert feat.kind == "h5py"
 
     # Proxies that should be hosted by the feature
     assert hasattr(feat, 'src') and isinstance(feat.src, Proxy)
