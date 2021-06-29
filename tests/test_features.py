@@ -8,19 +8,19 @@ from .utils import *
 
 
 def test_feature_class():
-    f = Feature()
+    f = Array()
     with pytest.raises(RuntimeError):
         f.load(None)
 
     class NotDB(object):
-        f = Feature()
+        f = Array()
 
     o = NotDB()
     with pytest.raises(RuntimeError):
         getattr(o, "f")
 
-    class DB(Database):
-        f = Feature()
+    class DB(FileType):
+        f = Array()
 
     db = in_mem(DB)
     print(vars(db.f))
@@ -29,7 +29,7 @@ def test_feature_class():
     assert getattr(db.f, "feature") is DB.f
     assert "Proxy" in repr(db.f)
 
-    class WithTransforms(Feature):
+    class WithTransforms(Array):
         __t__ = (None, )
         __grp_t__ = (None, )
 
@@ -54,7 +54,7 @@ def test_feature_class():
 
 
 def test_non_loading_feature(tmp_db):
-    class DB(Database):
+    class DB(FileType):
         x = FeatWithAttrs()
 
     sources = tuple(map(str, range(20)))
@@ -67,7 +67,7 @@ def test_non_loading_feature(tmp_db):
 
 
 def test_none_feature(tmp_db):
-    class DB(Database):
+    class DB(FileType):
         x = NoneFeat()
 
     sources = tuple(map(str, range(20)))
@@ -80,7 +80,7 @@ def test_none_feature(tmp_db):
 
 
 def test_bad_feat(tmp_db):
-    class DB(Database):
+    class DB(FileType):
         x = BadFeat()
 
     sources = tuple(map(str, range(20)))
@@ -93,10 +93,10 @@ def test_bad_feat(tmp_db):
 
 
 def test_group(tmp_db):
-    class DB(Database):
+    class DB(FileType):
         g = Group(
-            x=Array(),
-            y=Array(),
+            x=RandnArray(),
+            y=RandnArray(),
             after=AfterFeature()
         )
 
@@ -123,7 +123,7 @@ def test_state_dict(tmp_path):
     torch.save(net.state_dict(), tmp_path / "1.ckpt")
     torch.save(net.state_dict(), tmp_path / "2.ckpt")
 
-    class DB(Database):
+    class DB(FileType):
         # pass the state_dict for initialization
         sd = TensorDict(net.state_dict())
 
@@ -140,7 +140,7 @@ def test_state_dict(tmp_path):
     assert isinstance(net, Net)
 
     # all weights are stored with compression
-    grp = db.handler(None)[db.sd.name]
+    grp = db.handle(None)[db.sd.name]
 
     def is_compressed(name, obj):
         if isinstance(obj, h5py.Dataset) and "__arr__" in name:
@@ -153,8 +153,8 @@ def test_state_dict(tmp_path):
 
 
 def test_vshape(tmp_path):
-    class DB(Database):
-        x = VShape(Array())
+    class DB(FileType):
+        x = VShape(RandnArray())
 
     sources = tuple(map(str, range(8)))
     db = DB.create(tmp_path / "test1.h5", sources,
@@ -162,26 +162,26 @@ def test_vshape(tmp_path):
 
     loaded = DB.x.load("none")
     assert isinstance(loaded, dict)
-    assert "arr" in loaded and "_shape" in loaded
+    assert "arr" in loaded and "shape_" in loaded
 
     got = db.get("0")
-    assert got["x"].shape == Array().load(None).shape
+    assert got["x"].shape == RandnArray().load(None).shape
 
 
 def test_array_transform(tmp_path):
-    class DB(Database):
-        x = ArrayWithT()
+    class DB(FileType):
+        x = RandnArrayWithT()
 
     sources = tuple(map(str, range(8)))
     db = DB.create(tmp_path / "test1.h5", sources,
                    parallelism="mp")
 
     got = db.get("0")
-    assert got["x"].shape == Array().load(None).flat[:].shape
+    assert got["x"].shape == RandnArray().load(None).flat[:].shape
 
 
 def test_vocabulary(tmp_path):
-    class DB(Database):
+    class DB(FileType):
         x = IntVector()
         v = Vocabulary(derived_from="x")
 

@@ -7,7 +7,7 @@ from .utils import *
 @pytest.fixture
 def dict_db(tmp_db):
 
-    class DB(Database):
+    class DB(FileType):
         d = Dict()
 
     sources = tuple(map(str, range(8)))
@@ -44,11 +44,11 @@ def test_proxy_attributes(dict_db):
 
     # check that keeping the db open issues only one handler
     feat.owner.keep_open = True
-    hf = feat.handler()
-    assert hf is feat.owner.handler('r')
+    hf = feat.handle()
+    assert hf is feat.owner.handle('r')
     # should now be opened
     assert isinstance(feat["0"], dict)
-    assert hf is feat.owner.handler('r')
+    assert hf is feat.owner.handle('r')
     hf.close()
     assert not feat.owner._f
     feat.owner.keep_open = False
@@ -125,7 +125,7 @@ def test_proxy_api(dict_db, keep_open):
 @pytest.fixture
 def dict_of_dict_db(tmp_db):
 
-    class DB(Database):
+    class DB(FileType):
         d = DictofDict()
 
     sources = tuple(map(str, range(8)))

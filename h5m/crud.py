@@ -1,6 +1,5 @@
 import h5py
 import numpy as np
-import pandas as pd
 import os
 import re
 
@@ -28,8 +27,8 @@ def _load(source, schema={}, guard_func=None):
     Features whose `__re__` attribute matches against `source` contribute to the
     returned value.
 
-    If a Feature has a string stored in an attribute `derived_from`, the single argument
-    passed to this Feature's load() method changes to being what the "source feature" returned.
+    If a Array has a string stored in an attribute `derived_from`, the single argument
+    passed to this Array's load() method changes to being what the "source feature" returned.
     In pseudo-code :
         ```
         if feature.derived_from in out.keys():
@@ -45,7 +44,7 @@ def _load(source, schema={}, guard_func=None):
     schema : dict
         must have strings as keys (names of the H5 objects) and Features as values
     guard_func : optional callable
-        Feature whose load is equal to ``guard_func`` are by-passed.
+        Array whose load is equal to ``guard_func`` are by-passed.
         Typically, `guard_func` is the method of an abstract base class.
 
     Returns
@@ -90,7 +89,7 @@ class _add:
             ds_kwargs.setdefault("dtype", array.dtype)
             ds_kwargs.setdefault('shape', (0, *array.shape[1:]))
             ds_kwargs.setdefault('maxshape', (None, *array.shape[1:]))
-            ds_kwargs.setdefault('chunks', (1, *array.shape[1:]))
+            ds_kwargs.setdefault('chunks', array.shape)
             h5_group.create_dataset(ds_key, **ds_kwargs)
         # append new data to pre-existing
         offset = h5_group[ds_key].shape[0]

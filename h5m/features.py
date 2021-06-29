@@ -1,6 +1,11 @@
 import h5py
 import numpy as np
 import torch
+import librosa
+import imageio
+import os
+
+import dataclasses as dtc
 from functools import partial
 from multiprocessing import Manager
 
@@ -8,7 +13,7 @@ from .utils import depth_first_apply
 from .crud import _load
 
 
-class Feature:
+class Array:
     # re to match sources
     __re__ = r".*"
     # kwargs for h5py.create_dataset
@@ -33,7 +38,7 @@ class Feature:
         # user expects a Proxy that should already be
         # in obj's __dict__
         if self.name not in obj.__dict__:
-            raise RuntimeError(f"Feature '{self.name}' has not been properly attached to its parent object {obj},"
+            raise RuntimeError(f"Array '{self.name}' has not been properly attached to its parent object {obj},"
                                " it cannot mirror any h5 object.")
         proxy = obj.__dict__[self.name]
         return proxy
@@ -50,7 +55,7 @@ class Feature:
 
     def __repr__(self):
         name = getattr(self, 'name', "UNK")
-        return f"<Feature '{name}'>"
+        return f"<Array '{name}'>"
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -66,7 +71,7 @@ class Feature:
         self.__dict__.update({"__grp_t__": type(self).__grp_t__})
 
 
-class Group(Feature):
+class Group(Array):
 
     def __init__(self, **features):
         for k, v in features.items():
@@ -81,15 +86,15 @@ class Group(Feature):
                          for item in f.attrs.items()))
 
     def load(self, source):
-        return _load(source, self.features, guard_func=Feature.load)
+        return _load(source, self.features, guard_func=Array.load)
 
     def after_create(self, db, feature_key):
         for feat in self.features.values():
-            if getattr(type(feat), "after_create", Feature.after_create) != Feature.after_create:
+            if getattr(type(feat), "after_create", Array.after_create) != Array.after_create:
                 feat.after_create(db, feature_key + "/" + feat.name)
 
 
-class TensorDict(Feature):
+class TensorDict(Array):
     __re__ = r".*ckpt$"
     __ds_kwargs__ = dict()
 
@@ -99,7 +104,8 @@ class TensorDict(Feature):
     )
 
     def __init__(self, state_dict={}):
-        self.__ds_kwargs__ = {k: dict(compression="lzf", chunks=tuple(state_dict[k].shape))
+        self.__ds_kwargs__ = {k: dict(compression="lzf",
+                                      chunks=tuple(state_dict[k].shape))
                               for k in state_dict.keys()}
 
     @property
@@ -114,20 +120,42 @@ class TensorDict(Feature):
         return depth_first_apply(state_dict, lambda t: np.atleast_1d(t.detach().cpu().numpy()))
 
 
-class Image(Feature):
-    __re__ = r"png$|jpeg$|"
+class Image(Array):
+    __re__ = r"png$|jpeg$"
     __ds_kwargs__ = dict(
-        dtype=np.dtype("uint8"),
     )
 
+    @property
+    def attrs(self):
+        return {}
 
-class Sound(Feature):
+    def load(self, source):
+        img = imageio.imread(source)
+        return img
+
+
+@dtc.dataclass
+class Sound(Array):
     __re__ = r"wav$|aif$|aiff$|mp3$|mp4$|m4a$|"
 
+    sr: int = 22050
+    mono: bool = True
+    normalize: bool = True
 
-class VShape(Feature):
+    @property
+    def attrs(self):
+        return dtc.asdict(self)
+
+    def load(self, source):
+        y = librosa.load(source, self.sr, self.mono)[1]
+        if self.normalize:
+            y = librosa.util.normalize(y, )
+        return y
+
+
+class VShape(Array):
     __grp_t__ = (
-        lambda d: d["arr"].reshape(*d["_shape"]),
+        lambda d: d["arr"].reshape(*d["shape_"]),
     )
 
     def __init__(self, base_feat):
@@ -144,10 +172,10 @@ class VShape(Feature):
 
     def load(self, source):
         arr = self.base_feat.load(source)
-        return {"arr": arr.reshape(-1), "_shape": np.array(arr.shape)}
+        return {"arr": arr.reshape(-1), "shape_": np.array(arr.shape)}
 
 
-class Vocabulary(Feature):
+class Vocabulary(Array):
 
     def __init__(self, derived_from):
         self.derived_from = derived_from

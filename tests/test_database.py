@@ -1,7 +1,7 @@
 import pytest
 
 from h5m import *
-from h5m import Database
+from h5m import FileType
 
 from .utils import *
 
@@ -22,7 +22,7 @@ def custom_h5(tmp_path):
 def test_maps_custom_h5file(custom_h5):
 
     h5f = h5py.File(custom_h5, "r")
-    db = Database(custom_h5, "r")
+    db = FileType(custom_h5, "r")
     assert hasattr(db, "g1") and isinstance(db.g1, Proxy)
     assert hasattr(db, "g2") and isinstance(db.g2, Proxy)
     assert hasattr(db.g1, "d1") and isinstance(db.g1.d1, Proxy)
@@ -35,13 +35,13 @@ def test_maps_custom_h5file(custom_h5):
 
 
 def test_handler(custom_h5):
-    db = Database(custom_h5, "r")
-    assert isinstance(db, Database)
-    copy = Database(db.h5_file)
+    db = FileType(custom_h5, "r")
+    assert isinstance(db, FileType)
+    copy = FileType(db.h5_file)
     copy.keep_open = True
     # check that there is only one handler that stays open
-    h1 = copy.handler('r')
-    h2 = copy.handler('r')
+    h1 = copy.handle('r')
+    h2 = copy.handle('r')
     assert h1 is h2
     copy.close()
     # handle should now be closed
@@ -49,8 +49,8 @@ def test_handler(custom_h5):
 
     copy.keep_open = False
     # check that there is multiple handler
-    h1 = copy.handler('r')
-    h2 = copy.handler('r')
+    h1 = copy.handle('r')
+    h2 = copy.handle('r')
     assert h1 is not h2
     copy.close()
     # should not affect handlers
@@ -62,13 +62,13 @@ def test_handler(custom_h5):
     rv = db.load("42")
     assert isinstance(rv, dict)
 
-    assert "Database" in repr(db)
+    assert "FileType" in repr(db)
 
     db.info()
 
 
 def test_crud_api(custom_h5):
-    db = Database(custom_h5, "r+")
+    db = FileType(custom_h5, "r+")
     db.add("0", {
         # new feature
         "g3": {"d3": np.random.randn(1, 100)},
@@ -81,8 +81,8 @@ def test_crud_api(custom_h5):
 
 
 def test_in_mem():
-    db = in_mem(Database)
-    assert bool(db.handler("h5py"))
+    db = in_mem(FileType)
+    assert bool(db.handle("h5py"))
     assert not os.path.isfile(db.h5_file)
     db.add("0", {"ds": np.random.rand(3, 4, 5)})
     assert isinstance(db.get("0")["ds"], np.ndarray)

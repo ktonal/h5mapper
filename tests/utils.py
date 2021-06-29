@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import pytest
-from h5m import Feature
+from h5m import Array
 
 
 @pytest.fixture
@@ -11,7 +11,7 @@ def tmp_db(tmp_path):
     return root
 
 
-class FeatWithAttrs(Feature):
+class FeatWithAttrs(Array):
     __re__ = r".*"
 
     param1 = 18
@@ -26,7 +26,7 @@ class FeatWithAttrs(Feature):
         return np.zeros_like(inputs)
 
 
-class Array(FeatWithAttrs):
+class RandnArray(FeatWithAttrs):
 
     def load(self, source):
         return np.random.randn(4, 12)
@@ -37,7 +37,7 @@ class IntVector(FeatWithAttrs):
         return np.random.randint(0, 32, (1, 8, ))
 
 
-class ArrayWithT(Array):
+class RandnArrayWithT(RandnArray):
     __t__ = (
         lambda arr: arr.flat[:],
     )
@@ -82,7 +82,7 @@ class DerivedArray(FeatWithAttrs):
 class AfterFeature(FeatWithAttrs):
 
     def load(self, source):
-        return Array().load(source)
+        return RandnArray().load(source)
 
     def after_create(self, db, feature_key):
         print(self, feature_key)
@@ -97,7 +97,7 @@ class AfterArray(FeatWithAttrs):
         return None
 
     def after_create(self, db, feature_key):
-        return Array().load(None)
+        return RandnArray().load(None)
 
 
 class AfterDF(FeatWithAttrs):
@@ -113,16 +113,16 @@ class AfterDict(FeatWithAttrs):
         return None
 
     def after_create(self, db, feature_key):
-        return {"x": Array().load(None), "y": DF().load(None)}
+        return {"x": RandnArray().load(None), "y": DF().load(None)}
 
 
-class NoneFeat(Feature):
+class NoneFeat(Array):
 
     def load(self, source):
         return None
 
 
-class BadFeat(Feature):
+class BadFeat(Array):
 
     def load(self, source):
         return "this should raise an Exception"

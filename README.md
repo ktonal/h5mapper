@@ -23,13 +23,13 @@ The H5Mapper tries to simplify all that by
 
 One needs only 2 classes to do so :
 
-1. a `Feature` must implement `load(source)` which can return a `numpy.ndarray`, a `pandas.DataFrame` or a `dict` thereof with strings as keys.
+1. a `Array` must implement `load(source)` which can return a `numpy.ndarray`, a `pandas.DataFrame` or a `dict` thereof with strings as keys.
 
 ```python
 import h5mapper as h5m
 
 
-class MyFeature(h5m.Feature):
+class MyFeature(h5m.Array):
     
     def __init__(self, my_extraction_param=0):
         self.my_extraction_param = my_extraction_param
@@ -49,11 +49,11 @@ class MyFeature(h5m.Feature):
         # ...
 ```
 
-2. attach the `Feature` to a class inheriting from a `h5m.Database` and that's it!
+2. attach the `Array` to a class inheriting from a `h5m.FileType` and that's it!
 
 ```python
 
-class MyDB(h5m.Database):
+class MyDB(h5m.FileType):
     
     x = MyFeature(my_extraction_param=42)
 
@@ -75,7 +75,7 @@ if __name__ == "__main__":
 Primarly designed with `pytorch` users in mind, `h5m` plays very nicely with the `Dataset` class :
 
 ```python
-class MyDS(h5m.Database, torch.utils.data.Dataset):
+class MyDS(h5m.FileType, torch.utils.data.Dataset):
     
     x = MyInputFeature(42)
     labels = FilesLabels()

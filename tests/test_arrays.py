@@ -7,8 +7,8 @@ from .utils import *
 @pytest.fixture
 def array_db(tmp_db):
 
-    class DB(Database):
-        x = Array()
+    class DB(FileType):
+        x = RandnArray()
 
     sources = tuple(map(str, range(8)))
     db = DB.create(tmp_db / "test1.h5", sources,
@@ -43,11 +43,11 @@ def test_proxy_attributes(array_db):
 
     # check that keeping the db open issues only one handler
     feat.owner.keep_open = True
-    hf = feat.handler()
-    assert hf is feat.owner.handler('r')
+    hf = feat.handle()
+    assert hf is feat.owner.handle('r')
     # should now be opened
     assert isinstance(feat[:], np.ndarray)
-    assert hf is feat.owner.handler('r')
+    assert hf is feat.owner.handle('r')
     hf.close()
     assert not feat.owner._f
     feat.owner.keep_open = False
@@ -68,7 +68,7 @@ def test_proxy_item_api(array_db, keep_open):
     # assert feat.ids.asstr and isinstance(feat.ids[0], str)
 
     assert isinstance(feat[feat.refs[0]], np.ndarray)
-    assert feat[feat.refs[0]].shape == Array().load(None).shape
+    assert feat[feat.refs[0]].shape == RandnArray().load(None).shape
     check_handler(feat, keep_open)
 
     # SET item
@@ -102,7 +102,7 @@ def test_proxy_source_api(array_db, keep_open):
 
     # source-wise GET and SET
 
-    new_arr = Array().load(None)
+    new_arr = RandnArray().load(None)
     feat.add("21", new_arr)
     check_handler(feat, keep_open)
     assert np.allclose(feat.get("21"), new_arr)
