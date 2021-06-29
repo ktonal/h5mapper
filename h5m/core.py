@@ -1,12 +1,10 @@
 import h5py
 import numpy as np
-import pandas as pd
 from torch.utils.data import DataLoader
-from multiprocessing import cpu_count, Pool
-from concurrent.futures import ThreadPoolExecutor
+from multiprocessing import cpu_count
 import os
 from typing import Optional
-from functools import partial, reduce
+from functools import reduce
 import tempfile
 
 from .create import _create
@@ -122,14 +120,14 @@ class Proxy:
 
     def handle(self, mode="r"):
         """
-        to accommodate torch's DataLoader, handles to .h5 (pd.HDFStore or h5py.File)
+        to accommodate torch's DataLoader, h5py.File objects
         are requested in __getitem__ and __setitem__ by proxies, but
         to avoid I/O conflicts, they are instantiated only once by the root FileType object
          
         Returns
         -------
-        handle : h5py.File or pd.HDFStore
-            a handle that can read/write the data for this Proxy
+        handle : h5py.File
+            object that can read/write the data for this Proxy
         """
         return self.owner.handle(mode)
 
