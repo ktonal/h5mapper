@@ -37,7 +37,7 @@ def test_maps_custom_h5file(custom_h5):
 def test_handler(custom_h5):
     db = FileType(custom_h5, "r")
     assert isinstance(db, FileType)
-    copy = FileType(db.h5_file)
+    copy = FileType(db.filename)
     copy.keep_open = True
     # check that there is only one handler that stays open
     h1 = copy.handle('r')
@@ -83,11 +83,11 @@ def test_crud_api(custom_h5):
 def test_in_mem():
     db = in_mem(FileType)
     assert bool(db.handle("h5py"))
-    assert not os.path.isfile(db.h5_file)
+    assert not os.path.isfile(db.filename)
     db.add("0", {"ds": np.random.rand(3, 4, 5)})
     assert isinstance(db.get("0")["ds"], np.ndarray)
     db.close()
-    assert not db._f
+    assert not db.f_
 
 
 def test_as_temp():

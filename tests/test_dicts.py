@@ -18,9 +18,9 @@ def dict_db(tmp_db):
 
 def check_handler(feat, keep_open):
     if keep_open:
-        assert feat.owner._f
+        assert feat.owner.f_
     else:
-        assert not feat.owner._f
+        assert not feat.owner.f_
 
 
 def test_proxy_attributes(dict_db):
@@ -32,8 +32,6 @@ def test_proxy_attributes(dict_db):
     assert feat.is_group
 
     # Proxies that should be hosted by the feature
-    assert hasattr(feat, 'src') and isinstance(feat.src, Proxy)
-    assert hasattr(feat, 'refs') and isinstance(feat.refs, Proxy)
     assert hasattr(feat, 'x') and isinstance(feat.x, Proxy)
     assert hasattr(feat, 'y') and isinstance(feat.y, Proxy)
 
@@ -50,7 +48,7 @@ def test_proxy_attributes(dict_db):
     assert isinstance(feat["0"], dict)
     assert hf is feat.owner.handle('r')
     hf.close()
-    assert not feat.owner._f
+    assert not feat.owner.f_
     feat.owner.keep_open = False
 
 
@@ -115,6 +113,7 @@ def test_proxy_api(dict_db, keep_open):
     val["z"] = val.pop("y")
     feat.add("9", val)
     check_handler(feat, keep_open)
+    dict_db.info()
     assert np.all(feat["9"]["x"] == val["x"])
     assert np.all(feat["9"]["z"] == val["z"])
     check_handler(feat, keep_open)
@@ -143,8 +142,8 @@ def test_dictofdict_attributes(dict_of_dict_db):
     assert feat.is_group
 
     # Proxies that should be hosted by the feature
-    assert hasattr(feat, 'src') and isinstance(feat.src, Proxy)
-    assert hasattr(feat, 'refs') and isinstance(feat.refs, Proxy)
+    # assert hasattr(feat, 'src') and isinstance(feat.src, Proxy)
+    # assert hasattr(feat, 'refs') and isinstance(feat.refs, Proxy)
     # assert hasattr(feat, 'ids') and isinstance(feat.ids, Proxy)
     assert hasattr(feat, 'p') and isinstance(feat.p, Proxy)
     assert hasattr(feat, 'q') and isinstance(feat.q, Proxy)

@@ -59,12 +59,12 @@ class Dataset(h5m.FileType, torch.utils.data.Dataset):
             "xi": self.data.xi[item],
             "label": self.data.label[item],
             # id based
-            "x": self.data.x.get(self.data.x.ids[item]),
+            "x": self.data.x.get(str(item) + ".exm"),
         }
 
     def __len__(self):
         # the number of sources we loaded :
-        return len(self.data.ids)
+        return self.data.label.shape[0]
 
 
 # While consuming `train`, we will write to `logs` :
@@ -91,7 +91,7 @@ class ExerimentData(h5m.FileType):
 
         # because of the ".", we have to use get_feat() - or getattr(self.ckpts, "fc1.weight")
         w = self.get_feat("ckpts/fc1.weight")
-        epochs = w.ids
+        epochs = self.__src__.id[w.refs[()].astype(np.bool)]
         f, axs = plt.subplots(1, len(epochs))
         for i, ep in enumerate(sorted(epochs)):
             axs[i].imshow(w.get(ep))
@@ -105,7 +105,7 @@ class ExerimentData(h5m.FileType):
 MAX_EPOCHS = 30
 
 # build the dataset from sources (we add rubbish items in the list to demonstrate filtering)
-sources = [s for i in range(10000) for s in (str(i) + ".exm", str(i) + ".nope")]
+sources = [s for i in range(100) for s in (str(i) + ".exm", str(i) + ".nope")]
 train = Dataset.create("train.h5", sources, "w", keep_open=True)
 train.info()
 

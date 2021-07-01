@@ -23,15 +23,16 @@ def main(target, source, no_vshape=False, parallelism='mp', n_workers=8):
     start = time()
     # dynamically create a FileType
     ftp = h5m.filetype('ImageBank', dict(
-        img=h5m.Image() if no_vshape else h5m.VShape(h5m.Image())
+        img=h5m.Image() if no_vshape else h5m.VShape(h5m.Image()),
+        labels=h5m.DirLabels()
     ))
     # parallel job
     h5f = ftp.create(target, files, parallelism=parallelism, n_workers=n_workers)
     # echo
-    h5f.info()
     dur = time() - start
     click.echo(f"stored {N} files in {'%.3f' % dur} seconds")
-
+    h5f.info()
+    print(h5f.labels.d2i, h5f.labels.i2d)
     # it's just a demo...
     os.remove(target)
 

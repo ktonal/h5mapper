@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import librosa
 import imageio
-
+import os
 import dataclasses as dtc
 from functools import partial
 from multiprocessing import Manager
@@ -192,3 +192,18 @@ class Vocabulary(Array):
         # source "xi" is the dictionary
         feat.add("xi", {"x": x, "i": i})
         self.V = dict(self.V)
+
+
+class DirLabels(Array):
+
+    def __init__(self):
+        self.d2i = Manager().dict()
+
+    def load(self, source):
+        direc = os.path.split(source.strip("/"))[0]
+        self.d2i.setdefault(direc, len(self.d2i))
+        return np.array([self.d2i[direc]])
+
+    def after_create(self, db, feature_key):
+        self.d2i = dict(self.d2i)
+        self.i2d = {v: k for k, v in self.d2i.items()}

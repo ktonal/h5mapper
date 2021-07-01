@@ -1,5 +1,3 @@
-import pytest
-import torch
 import torch.nn as nn
 
 from h5m import *
@@ -76,6 +74,7 @@ def test_none_feature(tmp_db):
 
     assert hasattr(db, 'x')
     assert db.x.is_group
+    db.info()
     assert not any(isinstance(v, Proxy) for v in db.x.__dict__.values())
 
 
@@ -134,7 +133,7 @@ def test_state_dict(tmp_path):
 
     db = DB.create(tmp_path / "sd.h5", source)
     assert isinstance(db, DB)
-    got = db.get(db.sd.ids[0])["sd"]
+    got = db.get(db.refs.index[0])["sd"]
     assert "fc.weight" in got and "cv.weight" in got
     net.load_state_dict(got)
     assert isinstance(net, Net)

@@ -1,5 +1,6 @@
 import h5py
 import numpy as np
+import pandas as pd
 from torch.utils.data import DataLoader
 from multiprocessing import cpu_count
 import os
@@ -10,7 +11,8 @@ import tempfile
 from .create import _create
 from .features import Array
 from .serve import DefaultDataset
-from .crud import _load, _add, NP_KEY, PRIVATE_GRP_KEYS, SRC_KEY, ID_KEY, REF_KEY, KEYS_KEY, H5_NONE
+from .crud import _load, _add, NP_KEY, SRC_KEY, REF_KEY, H5_NONE
+from .utils import flatten_dict
 
 
 def as_temp(filename):
@@ -40,13 +42,8 @@ class Proxy:
         """returns the h5py object of this proxy"""
         return self.handle()[self.name]
 
-    @property
-    def attrs_(self):
-        """returns the h5py .attrs of this proxy"""
-        return self.handle()[self.group_name].attrs
-
     @classmethod
-    def _from_group(cls, owner, feature, group):
+    def from_group(cls, owner, feature, group):
         """
         this is the recursive method that build a Proxy hierarchy from a live H5Group
         
@@ -64,52 +61,41 @@ class Proxy:
         proxy : Proxy
             a proxy to `group` with the children attached as attributes
         """
-        if SRC_KEY not in group.name:
-            attrs = {k: None if not isinstance(v, np.ndarray) and v == H5_NONE else v
-                     for k, v in group.attrs.items()}
-        else:
-            attrs = {}
+        attrs = {k: None if not isinstance(v, np.ndarray) and v == H5_NONE else v
+                 for k, v in group.attrs.items()}
         # we "lift up" x/__arr__ or x/__df__ to attributes named "x"
         if NP_KEY in group.keys():
             root = Proxy(owner, feature, group.name, NP_KEY, attrs)
         else:
             root = Proxy(owner, feature, group.name, "", attrs)
-        if SRC_KEY in group.keys():
-            refs = Proxy(owner, None, group.name + "/" + SRC_KEY, REF_KEY)
-            # ids = Proxy(owner, None, group.name + "/" + SRC_KEY, ID_KEY)
-            ids = list(group[SRC_KEY].attrs.keys())
-            # print("ATTACHING", "refs, ids", "TO", root)
+        if REF_KEY in group.keys():
+            refs = Proxy(owner, None, group.name, REF_KEY)
             setattr(root, "refs", refs)
-            setattr(root, "ids", ids)
-            if KEYS_KEY.strip("/") in group[SRC_KEY].keys():
-                keys = Proxy(owner, None, group.name + "/" + SRC_KEY, KEYS_KEY)
-                setattr(root, "keys", keys)
         # recursively add children as attributes before returning the object
         for k in group.keys():
-            if isinstance(group[k], h5py.Group) and k not in PRIVATE_GRP_KEYS:
-                child = Proxy._from_group(owner, feature, group[k])
+            if isinstance(group[k], h5py.Group):
+                child = Proxy.from_group(owner, feature, group[k])
             else:
                 attrs = {k: None if v == H5_NONE else v for k, v in group[k].attrs.items()}
                 child = Proxy(owner,
                               None if any(k in reserved
-                                          for reserved in [REF_KEY, ID_KEY, KEYS_KEY])
+                                          for reserved in [REF_KEY, SRC_KEY])
                               else feature,
                               group.name, "/" + k, attrs)
             setattr(root, k, child)
         return root
 
     def __init__(self, owner, feature, group_name, key="", attrs={}):
-        self.h5_file = owner.h5_file
         self.name = "/".join([group_name.strip("/"), key.strip("/")])
         self.group_name = group_name
-        self.owner = owner
+        self.owner: FileType = owner
         self.feature = feature
         self.attrs = attrs
         self.is_group = not bool(key)
         if not self.is_group:
             # copy some of the dataset properties
             # with a non-disruptive handler (hopefully...)
-            was_open = bool(self.owner._f)
+            was_open = bool(self.owner.f_)
             h5f = self.handle("r")
             ds = h5f[self.name]
             self.shape, self.dtype, self.size, self.nbytes = ds.shape, ds.dtype, ds.size, ds.nbytes
@@ -169,21 +155,20 @@ class Proxy:
         """getitem for groups - here items are the sources' ids"""
         # item is a source name
         if isinstance(src, str):
-            if not hasattr(self, "src"):
-                # not a h5m Group
-                return {}
-            # we store the map ids <-> indices for refs and keys
-            # in the src.attrs of the feature
-            mask = self.src.attrs_[src]
-            refs, ks = self.src.refs[mask], self.src.keys[mask]
+            refs = self.owner.refs.loc[src]
             out = {}
-            for ref, k in zip(refs, ks):
-                feat = getattr(self, k)
-                if ref:  # only arrays have refs
-                    o = feat[ref]
+            for ref, k in zip(refs.values, refs.index):
+                if self.name not in k or not ref:
+                    continue
+                k = k.replace(self.name, "")
+                k = k.split("/")
+                if len(k) > 1:
+                    out[k[0]] = getattr(self, k[0])[src]
                 else:
-                    o = feat[src]
-                out[k] = o
+                    k = k[0]
+                    proxy = getattr(self, k)
+                    o = proxy[ref]
+                    out[k] = o
             if getattr(self, "__grp_t__", tuple()):
                 out = reduce(lambda x, func: func(x), getattr(self, '__grp_t__'), out)
             return out
@@ -193,24 +178,25 @@ class Proxy:
     def _setgrp(self, src: str, value: dict):
         """setitem for groups - here items are the sources' ids"""
         if isinstance(src, str):
-            if not hasattr(self, "src"):
-                print("no SRC")
-                # not a h5m Group
-                return
             # item = source name
-            mask = self.src.attrs_.get(src, [])
-            if not np.any(mask):
+            try:
+                refs = self.owner.refs.loc[src]
+            except KeyError:
                 self.add(src, value)
                 return
-            refs, ks = self.src.refs[mask], self.src.keys[mask]
+            refs, ks = refs.values, refs.index
             for ref, k in zip(refs, ks):
-                feat = getattr(self, k)
-                if ref:  # only arrays have refs
-                    # will (probably) raise some errors if one's isn't careful with shapes...
-                    feat[ref] = value[k]
+                if self.name not in k or not ref:
+                    continue
+                k = k.replace(self.name, "")
+                k = k.split("/")
+                if len(k) > 1:
+                    proxy = getattr(self, k[0])
+                    proxy[src] = value[k[0]]
                 else:
-                    # feat is a group
-                    feat[src] = value[k]
+                    k = k[0]
+                    proxy = getattr(self, k)
+                    proxy[ref] = value[k]
             self._attach_new_children(value)
         else:
             raise TypeError(f"item should be of type str. Got {type(src)}")
@@ -223,23 +209,23 @@ class Proxy:
 
     def add(self, source, data):
         h5f = self.handle("r+" if self.owner.mode not in ("w", "r+", "a") else self.owner.mode)
-        ref = _add.source(h5f[self.group_name],
-                          source, data, self.feature.__ds_kwargs__)
-        # h5f.flush()
+        data_prefixed = flatten_dict(data, prefix=self.group_name.strip("/"))
+        _add.source(h5f, source, data_prefixed, self.feature.__ds_kwargs__, set(self.owner.refs.columns))
+        self.owner.update_refs()
         if isinstance(data, dict):
             self._attach_new_children(data)
-        return ref
+        return self
 
     def get(self, source):
         if self.is_group:
             return self._getgrp(source)
-        return self[self.refs[self.src.attrs_[source][0]]]
+        return self[self.refs[self.owner.refs.index.get_loc(source)]]
 
     def set(self, source, data):
         if self.is_group:
             return self._setgrp(source, data)
         else:
-            self[self.refs[self.src.attrs_[source][0]]] = data
+            self[self.refs[self.owner.refs.index.get_loc(source)]] = data
 
     def iset(self, source, idx, data):
         if self.is_group:
@@ -247,7 +233,7 @@ class Proxy:
             return self._setgrp(source, data)
         else:
             ds = self.handle()[self.name]
-            ref = self.refs[self.src.attrs_[source][0]]
+            ref = self.refs[self.owner.refs.index.get_loc(source)]
             # get the MultiBlockSlice behind the regionref :
             mbs = h5py.h5r.get_region(ref, ds.id).get_regular_hyperslab()
             # mbs[0][0] is the first index of the first axis of the region
@@ -256,13 +242,16 @@ class Proxy:
 
 class FileType:
 
-    def __init__(self, h5_file, mode="r", keep_open=False, **h5_kwargs):
-        self.h5_file = h5_file
+    def __init__(self, filename, mode="r", keep_open=False, **h5_kwargs):
+        self.filename = filename
         self.mode = mode
         self.h5_kwargs = h5_kwargs
         self.keep_open = keep_open
-        self._f: Optional[h5py.File] = None
-        h5f = self.handle(mode)
+        self.f_: Optional[h5py.File] = None
+        self.rebuild()
+
+    def rebuild(self):
+        h5f = self.handle(self.mode)
         for k, val in type(self).__dict__.items():
             if isinstance(val, Array):
                 self.__dict__[k] = Proxy(self, val, k)
@@ -270,11 +259,26 @@ class FileType:
         for k in h5f.keys():
             # if a key in a file isn't in this class, attach a base Array
             feature = getattr(type(self), k, setattr(self, k, Array()))
-            self.__dict__[k] = Proxy._from_group(self, feature, h5f[k])
+            if isinstance(h5f[k], h5py.Group):
+                self.__dict__[k] = Proxy.from_group(self, feature, h5f[k])
+            else:
+                self.__dict__[k] = Proxy(self, feature, h5f[k].parent.name, k, dict(h5f[k].attrs))
+        self.update_refs()
+
+    def update_refs(self):
+        if hasattr(self, SRC_KEY):
+            h5f = self.handle(self.mode)
+            ids = getattr(getattr(self, SRC_KEY), "id", [])[:]
+            paths = getattr(getattr(self, SRC_KEY), "refed", [])[:]
+            refs = [h5f[p + "/" + REF_KEY][()] for p in paths]
+            self.refs = pd.DataFrame(np.stack(refs, axis=1) if len(refs) else [],
+                                     columns=paths, index=ids)
+        else:
+            self.refs = pd.DataFrame([])
 
     @classmethod
     def create(cls,
-               h5_file,
+               filename,
                sources,
                mode="w",
                schema={},
@@ -283,18 +287,26 @@ class FileType:
                keep_open=False,
                **h5_kwargs
                ):
-        return _create(cls, h5_file, sources, mode, schema, n_workers, parallelism, keep_open, **h5_kwargs)
+        return _create(cls,
+                       filename,
+                       sources,
+                       mode,
+                       schema,
+                       n_workers,
+                       parallelism,
+                       keep_open,
+                       **h5_kwargs)
 
     def handle(self, mode=None):
         """
         """
         mode = mode if mode is not None else self.mode
         if self.keep_open:
-            if not self._f or (mode in ("r+", "a", "w") and self._f.mode == "r"):
+            if not self.f_ or (mode in ("r+", "a", "w") and self.f_.mode == "r"):
                 self.close()
-                self._f = h5py.File(self.h5_file, mode, **self.h5_kwargs)
-            return self._f
-        return h5py.File(self.h5_file, mode, **self.h5_kwargs)
+                self.f_ = h5py.File(self.filename, mode, **self.h5_kwargs)
+            return self.f_
+        return h5py.File(self.filename, mode, **self.h5_kwargs)
 
     @classmethod
     def load(cls, source, schema={}):
@@ -303,18 +315,18 @@ class FileType:
         return _load(source, schema, guard_func=Array.load)
 
     def _attach_new_children(self, data, handle):
-        # new_feats = {k for k in data.keys() if k not in self.__dict__}
         for new in data.keys():
             feature = getattr(type(self), new, setattr(self, new, Array()))
-            proxy = Proxy._from_group(self, feature, handle[new])
+            proxy = Proxy.from_group(self, feature, handle[new])
             self.__dict__[new] = proxy
 
     def add(self, source, data):
         h5f = self.handle(mode="r+" if self.mode not in ("w", "r+", "a") else self.mode)
         kwargs = {k: getattr(v, "__ds_kwargs__", {}) for k, v in self.__dict__.items() if isinstance(v, Proxy)}
-        ref = _add.source(h5f, source, data, kwargs)
-        self._attach_new_children(data, h5f)
-        return ref
+        data = flatten_dict(data)
+        _add.source(h5f, source, data, kwargs, set(self.refs.columns))
+        self.rebuild()
+        return self
 
     def get(self, source):
         return {k: v.get(source)
@@ -325,18 +337,18 @@ class FileType:
         return reduce(getattr, name, self)
 
     def flush(self):
-        if self._f:
-            self._f.flush()
+        if self.f_:
+            self.f_.flush()
 
     def close(self):
-        if self._f:
-            self._f.close()
+        if self.f_:
+            self.f_.close()
 
     def __del__(self):
         self.close()
 
     def __repr__(self):
-        return f"<FileType {self.h5_file}>"
+        return f"<{type(self).__qualname__} {self.filename}>"
 
     def info(self):
         # preserve current handler state
@@ -346,8 +358,7 @@ class FileType:
             parts = name.split("/")
             s = " " * (len(parts) - 1 + len("/".join(parts[:-1]))) + parts[-1] + "/"
             if isinstance(h5f[name], h5py.Group):
-                if SRC_KEY in name:
-                    s += f"  ({len(h5f[name].attrs.keys())} ids)"
+                pass
             else:
                 s += "  " + repr(h5f[name].shape) + "  " + repr(h5f[name].dtype)
             print(s)
@@ -362,4 +373,4 @@ class FileType:
 
 
 def filetype(name, schema):
-    return type(name, (FileType, ), schema)
+    return type(name, (FileType,), schema)
