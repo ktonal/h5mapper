@@ -11,9 +11,9 @@ CLI for an Image Bank
 @click.command()
 @click.option("-t", "--target", help="file to be created")
 @click.option("-s", "--source", help="where to search for images")
-@click.option("--no-vshape", is_flag=True, help="whether the source images have different shapes")
-@click.option("--parallelism", default='mp', help="flavor of parallelism to use."
-                                                  " Must be one of ['mp', 'future', 'none']")
+@click.option("--no-vshape", "-v", is_flag=True, help="whether the source images have different shapes")
+@click.option("--parallelism", '-p', default='mp', help="flavor of parallelism to use."
+                                                        " Must be one of ['mp', 'future', 'none']")
 @click.option("--n-workers", "-w", default=8, help="number of workers to use")
 def main(target, source, no_vshape=False, parallelism='mp', n_workers=8):
     # get all the files under `source` with an image extension
@@ -32,7 +32,7 @@ def main(target, source, no_vshape=False, parallelism='mp', n_workers=8):
     dur = time() - start
     click.echo(f"stored {N} files in {'%.3f' % dur} seconds")
     h5f.info()
-    print(h5f.labels.d2i, h5f.labels.i2d)
+    print("LABELS:", h5f.labels.d2i)
     # it's just a demo...
     os.remove(target)
 
@@ -41,4 +41,3 @@ if __name__ == '__main__':
     # invoke with `python path/to/imagebank_cli.py [OPTIONS] `
     # or add main() as entry-point to your setup.py
     target = main()
-

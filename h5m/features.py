@@ -6,9 +6,12 @@ import os
 import dataclasses as dtc
 from functools import partial
 from multiprocessing import Manager
+import warnings
 
 from .utils import depth_first_apply
 from .crud import _load
+
+warnings.filterwarnings("ignore", message="PySoundFile failed.")
 
 
 class Array:
@@ -134,7 +137,7 @@ class Image(Array):
 
 @dtc.dataclass
 class Sound(Array):
-    __re__ = r"wav$|aif$|aiff$|mp3$|mp4$|m4a$|"
+    __re__ = r"wav$|aif$|aiff$|mp3$|mp4$|m4a$"
 
     sr: int = 22050
     mono: bool = True
@@ -145,7 +148,7 @@ class Sound(Array):
         return dtc.asdict(self)
 
     def load(self, source):
-        y = librosa.load(source, self.sr, self.mono)[1]
+        y = librosa.load(source, self.sr, self.mono)[0]
         if self.normalize:
             y = librosa.util.normalize(y, )
         return y

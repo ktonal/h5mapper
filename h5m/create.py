@@ -21,7 +21,7 @@ def _create(cls,
             sources,
             mode="w",
             schema={},
-            n_workers=cpu_count() * 2,
+            n_workers=cpu_count(),
             parallelism='mp',
             keep_open=False,
             **h5_kwargs
@@ -86,8 +86,6 @@ def _create(cls,
     if parallelism == 'mp':
         executor.close()
         executor.join()
-
-    f.flush()
     # run after_create
     db = cls(filename, mode="r+", keep_open=False)
     for key, feature in schema.items():

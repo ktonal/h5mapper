@@ -282,7 +282,7 @@ class FileType:
                sources,
                mode="w",
                schema={},
-               n_workers=cpu_count() * 2,
+               n_workers=cpu_count(),
                parallelism='mp',
                keep_open=False,
                **h5_kwargs

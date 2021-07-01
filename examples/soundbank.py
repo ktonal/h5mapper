@@ -14,8 +14,8 @@ CLI for a Sound Bank
 @click.option("--sr", "-r", default=22050, help="the sample rate used for loading the files")
 @click.option("--mono", "-m", default=True, help="whether to force conversion to mono")
 @click.option("--normalize", "-n", default=True, help="whether each file should be normalized")
-@click.option("--parallelism", default='mp', help="flavor of parallelism to use."
-                                                  " Must be one of ['mp', 'future', 'none']")
+@click.option("--parallelism", "-p", default='mp', help="flavor of parallelism to use."
+                                                        " Must be one of ['mp', 'future', 'none']")
 @click.option("--n-workers", "-w", default=8, help="number of workers to use")
 def main(target, source, sr=22050, mono=True, normalize=True, parallelism='mp', n_workers=8):
     # get all the files under `source` with an image extension
@@ -39,7 +39,6 @@ def main(target, source, sr=22050, mono=True, normalize=True, parallelism='mp', 
 
 
 if __name__ == '__main__':
-    # invoke with `python path/to/imagebank_cli.py [OPTIONS] `
+    # invoke with `python path/to/soundbank.py [OPTIONS] `
     # or add main() as entry-point to your setup.py
     target = main()
-
