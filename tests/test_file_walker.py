@@ -3,7 +3,7 @@ import re
 import os
 
 
-from h5m.file_walker import FileWalker
+from h5mapper.file_walker import FileWalker
 
 
 def test_find_matches(tmp_path):

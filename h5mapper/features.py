@@ -14,7 +14,7 @@ from .crud import _load
 warnings.filterwarnings("ignore", message="PySoundFile failed.")
 
 
-class Array:
+class Feature:
     # re to match sources
     __re__ = r".*"
     # kwargs for h5py.create_dataset
@@ -70,6 +70,10 @@ class Array:
         self.__dict__.update(state)
         self.__dict__.update({"__t__": type(self).__t__})
         self.__dict__.update({"__grp_t__": type(self).__grp_t__})
+
+
+class Array(Feature):
+    pass
 
 
 class Group(Array):
@@ -189,7 +193,7 @@ class Vocabulary(Array):
         self.V.update({x: i for x, i in zip(items, range(len(self.V), len(items)))})
 
     def after_create(self, db, feature_key):
-        feat = db.get_feat(feature_key)
+        feat = db.get_proxy(feature_key)
         x = np.array(list(self.V.keys()))
         i = np.array(list(self.V.values()))
         # source "xi" is the dictionary

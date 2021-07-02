@@ -1,6 +1,6 @@
 import torch.nn as nn
 
-from h5m import *
+from h5mapper import *
 
 from .utils import *
 
@@ -17,7 +17,7 @@ def test_feature_class():
     with pytest.raises(RuntimeError):
         getattr(o, "f")
 
-    class DB(FileType):
+    class DB(TypedFile):
         f = Array()
 
     db = in_mem(DB)
@@ -52,7 +52,7 @@ def test_feature_class():
 
 
 def test_non_loading_feature(tmp_db):
-    class DB(FileType):
+    class DB(TypedFile):
         x = FeatWithAttrs()
 
     sources = tuple(map(str, range(20)))
@@ -65,7 +65,7 @@ def test_non_loading_feature(tmp_db):
 
 
 def test_none_feature(tmp_db):
-    class DB(FileType):
+    class DB(TypedFile):
         x = NoneFeat()
 
     sources = tuple(map(str, range(20)))
@@ -79,7 +79,7 @@ def test_none_feature(tmp_db):
 
 
 def test_bad_feat(tmp_db):
-    class DB(FileType):
+    class DB(TypedFile):
         x = BadFeat()
 
     sources = tuple(map(str, range(20)))
@@ -92,7 +92,7 @@ def test_bad_feat(tmp_db):
 
 
 def test_group(tmp_db):
-    class DB(FileType):
+    class DB(TypedFile):
         g = Group(
             x=RandnArray(),
             y=RandnArray(),
@@ -122,7 +122,7 @@ def test_state_dict(tmp_path):
     torch.save(net.state_dict(), tmp_path / "1.ckpt")
     torch.save(net.state_dict(), tmp_path / "2.ckpt")
 
-    class DB(FileType):
+    class DB(TypedFile):
         # pass the state_dict for initialization
         sd = TensorDict(net.state_dict())
 
@@ -152,7 +152,7 @@ def test_state_dict(tmp_path):
 
 
 def test_vshape(tmp_path):
-    class DB(FileType):
+    class DB(TypedFile):
         x = VShape(RandnArray())
 
     sources = tuple(map(str, range(8)))
@@ -168,7 +168,7 @@ def test_vshape(tmp_path):
 
 
 def test_array_transform(tmp_path):
-    class DB(FileType):
+    class DB(TypedFile):
         x = RandnArrayWithT()
 
     sources = tuple(map(str, range(8)))
@@ -180,7 +180,7 @@ def test_array_transform(tmp_path):
 
 
 def test_vocabulary(tmp_path):
-    class DB(FileType):
+    class DB(TypedFile):
         x = IntVector()
         v = Vocabulary(derived_from="x")
 

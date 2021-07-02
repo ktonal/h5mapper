@@ -1,13 +1,13 @@
 import pytest
 
-from h5m import *
+from h5mapper import *
 from .utils import *
 
 
 @pytest.fixture
 def array_db(tmp_db):
 
-    class DB(FileType):
+    class DB(TypedFile):
         x = RandnArray()
 
     sources = tuple(map(str, range(8)))

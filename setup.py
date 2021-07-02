@@ -3,7 +3,7 @@ from io import open
 from setuptools import setup, find_packages
 import os
 
-with open('h5m/__init__.py', 'r') as f:
+with open('h5mapper/__init__.py', 'r') as f:
     for line in f:
         if line.startswith('__version__'):
             version = line.strip().split('=')[1].strip(' \'"')
@@ -36,7 +36,6 @@ kwargs = {
         "Intended Audience :: Science/Research",
         "Intended Audience :: Other Audience",
         "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
-        "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",

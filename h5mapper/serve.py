@@ -11,10 +11,11 @@ import collections
 __all__ = [
     'AsSlice',
     'AsFramedSlice',
+    'GetId',
     'Input',
     'Target',
     'process_batch',
-    'DefaultDataset',
+    'ProgrammableDataset',
 ]
 
 
@@ -33,26 +34,35 @@ class Getter:
     """
     n: Optional[int] = dtc.field(default=None, init=False)
 
-    def __call__(self, feat_data, item):
+    def __call__(self, proxy, item):
         """
-        apply this instance's logic to get data from ``feat_data`` for a given ``item``
+        apply this instance's logic to get data from ``proxy`` for a given ``item``
 
         Parameters
         ----------
-        feat_data: [np.ndarray, torch.Tensor, mimikit.FeatureProxy]
-
+        proxy: h5m.Proxy
+            the proxy to read from
         item: int
             the index emitted from a sampler
 
         Returns
         -------
         data: Any
-            the examples corresponding to this item
+            the data corresponding to this item
         """
-        return feat_data[item]
+        return proxy[item]
 
     def __len__(self):
         return self.n
+
+
+class GetId(Getter):
+
+    def __call__(self, proxy, item):
+        # TODO : this should index directly into the array of
+        #  valid ids for this proxy (owners may have more ids than
+        #  any of their proxies...)
+        return proxy.get(proxy.owner.refs.index[item])
 
 
 @dtc.dataclass()
@@ -74,9 +84,9 @@ class AsSlice(Getter):
 
     .. testcode::
 
-       import mimikit as mmk
+       import h5mapper as h5m
 
-       slicer = mmk.AsSlice(shift=2, length=3)
+       slicer = h5m.AsSlice(shift=2, length=3)
        data, item = list(range(10)), 2
 
        # now use it like a function :
@@ -94,9 +104,9 @@ class AsSlice(Getter):
     length: int = 1
     stride: int = 1
 
-    def __call__(self, feat_data, item):
+    def __call__(self, proxy, item):
         i = item * self.stride
-        return feat_data[slice(i + self.shift, i + self.shift + self.length)]
+        return proxy[slice(i + self.shift, i + self.shift + self.length)]
 
     def __len__(self):
         return (self.n - (self.shift + self.length) + 1) // self.stride
@@ -107,8 +117,8 @@ class AsFramedSlice(AsSlice):
     frame_size: int = 1
     as_strided: bool = False
 
-    def __call__(self, feat_data, item):
-        sliced = super(AsFramedSlice, self).__call__(feat_data, item)
+    def __call__(self, proxy, item):
+        sliced = super(AsFramedSlice, self).__call__(proxy, item)
         if self.as_strided:
             if isinstance(sliced, np.ndarray):
                 as_strided = lambda tensor: torch.as_strided(torch.from_numpy(tensor),
@@ -127,7 +137,8 @@ class AsFramedSlice(AsSlice):
 
 @dtc.dataclass
 class Input:
-    db_key: str = ''
+    """read and transform data from a specific key/proxy in a .h5 file"""
+    key: str = ''
     getter: Getter = Getter()
     transform: Callable = lambda x: x
 
@@ -146,7 +157,7 @@ np_str_obj_array_pattern = re.compile(r'[SaUO]')
 def process_batch(batch, test=lambda x: False, func=lambda x: x):
     """
     recursively apply func to the elements of data if test(element) is True.
-    This is used in DefaultDataset to process elements (Input or Target) packed in tuples, list, dict etc...
+    This is used in ProgrammableDataset to process elements (Input or Target) packed in tuples, list, dict etc...
     """
     elem_type = type(batch)
     if test(batch):
@@ -165,15 +176,26 @@ def _is_batchitem(obj):
     return isinstance(obj, (Input, Target))
 
 
-class DefaultDataset(Dataset):
+class ProgrammableDataset(Dataset):
+    """
+    Dataset whose __getitem__ method is specified by a batch object passed to its constructor.
+
+    The batch object can be of any type supported by torch's default collate function (Mapping, Sequence, etc.)
+    and should contain "batch-items" (``h5m.Input`` or ``h5m.Target``).
+    """
 
     def __init__(self, file, batch=tuple()):
         super(Dataset, self).__init__()
         self.file = file
-        # pass the lengths of the db features to the getters
+
         def cache_lengths(feat):
+            # pass the lengths of the db features to the getters
             if feat.getter.n is None:
-                setattr(feat.getter, 'n', len(getattr(self.file, feat.db_key)))
+                if isinstance(feat.getter, GetId):
+                    n = sum(getattr(file, feat.key).refs[()].astype(np.bool))
+                else:
+                    n = len(getattr(self.file, feat.key))
+                setattr(feat.getter, 'n', n)
             return feat
 
         self.batch = process_batch(batch, _is_batchitem, cache_lengths)
@@ -189,9 +211,12 @@ class DefaultDataset(Dataset):
 
     def __getitem__(self, item):
         def get_data(feat):
-            return feat.transform(feat.getter(getattr(self.file, feat.db_key), item))
+            return feat.transform(feat.getter(getattr(self.file, feat.key), item))
 
         return process_batch(self.batch, _is_batchitem, get_data)
 
     def __len__(self):
         return self.N
+
+    def __del__(self):
+        self.file.close()

@@ -62,16 +62,16 @@ def _create(cls,
     n_sources = len(sources)
     batch_size = n_workers * 4
     refed_paths = set()
-    for i in tqdm(range(1 + n_sources // batch_size)):
+    for i in tqdm(range(1 + n_sources // batch_size), leave=False):
         start_loc = max([i * batch_size, 0])
         end_loc = min([(i + 1) * batch_size, n_sources])
         this_sources = sources[start_loc:end_loc]
         try:
             results = executor.map(partial(_load, schema=schema, guard_func=Array.load), this_sources)
         except Exception as e:
-            f.flush()
             f.close()
-            os.remove(filename)
+            if mode == "w":
+                os.remove(filename)
             if parallelism == 'mp':
                 executor.terminate()
             raise e

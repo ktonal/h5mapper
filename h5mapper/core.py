@@ -9,8 +9,8 @@ from functools import reduce
 import tempfile
 
 from .create import _create
-from .features import Array
-from .serve import DefaultDataset
+from .features import Feature
+from .serve import ProgrammableDataset
 from .crud import _load, _add, NP_KEY, SRC_KEY, REF_KEY, H5_NONE
 from .utils import flatten_dict
 
@@ -39,7 +39,7 @@ class Proxy:
 
     @property
     def h5_(self):
-        """returns the h5py object of this proxy"""
+        """returns the h5py object corresponding to this proxy"""
         return self.handle()[self.name]
 
     @classmethod
@@ -49,7 +49,7 @@ class Proxy:
         
         Parameters
         ----------
-        owner : FileType
+        owner : TypedFile
             the root object holding this proxy
         feature : Array
             the feature that loaded this group
@@ -88,7 +88,7 @@ class Proxy:
     def __init__(self, owner, feature, group_name, key="", attrs={}):
         self.name = "/".join([group_name.strip("/"), key.strip("/")])
         self.group_name = group_name
-        self.owner: FileType = owner
+        self.owner: TypedFile = owner
         self.feature = feature
         self.attrs = attrs
         self.is_group = not bool(key)
@@ -108,7 +108,7 @@ class Proxy:
         """
         to accommodate torch's DataLoader, h5py.File objects
         are requested in __getitem__ and __setitem__ by proxies, but
-        to avoid I/O conflicts, they are instantiated only once by the root FileType object
+        to avoid I/O conflicts, they are instantiated only once by the root TypedFile object
          
         Returns
         -------
@@ -147,6 +147,12 @@ class Proxy:
         else:
             with self.handle("r+") as f:
                 f[self.name][item] = value
+
+    def __len__(self):
+        # TODO : Should this actually return the number of ids?
+        if self.is_group:
+            raise TypeError("Group Proxies have no length")
+        return self.shape[0]
 
     def __repr__(self):
         return f"<Proxy {self.name}>"
@@ -202,7 +208,7 @@ class Proxy:
             raise TypeError(f"item should be of type str. Got {type(src)}")
 
     def _attach_new_children(self, data):
-        new_feats = {k for k in data.keys() if not getattr(self, k, False)}
+        new_feats = {k for k in data.keys() if getattr(self, k, None) is None}
         for new in new_feats:
             key = NP_KEY if isinstance(data[new], np.ndarray) else ""
             setattr(self, new, Proxy(self.owner, self.feature, self.name + new, key))
@@ -211,7 +217,7 @@ class Proxy:
         h5f = self.handle("r+" if self.owner.mode not in ("w", "r+", "a") else self.owner.mode)
         data_prefixed = flatten_dict(data, prefix=self.group_name.strip("/"))
         _add.source(h5f, source, data_prefixed, self.feature.__ds_kwargs__, set(self.owner.refs.columns))
-        self.owner.update_refs()
+        self.owner.build_refs()
         if isinstance(data, dict):
             self._attach_new_children(data)
         return self
@@ -240,7 +246,7 @@ class Proxy:
             ds[mbs[0][0] + idx] = data
 
 
-class FileType:
+class TypedFile:
 
     def __init__(self, filename, mode="r", keep_open=False, **h5_kwargs):
         self.filename = filename
@@ -248,24 +254,24 @@ class FileType:
         self.h5_kwargs = h5_kwargs
         self.keep_open = keep_open
         self.f_: Optional[h5py.File] = None
-        self.rebuild()
+        self.build_proxies()
 
-    def rebuild(self):
+    def build_proxies(self):
         h5f = self.handle(self.mode)
         for k, val in type(self).__dict__.items():
-            if isinstance(val, Array):
+            if isinstance(val, Feature):
                 self.__dict__[k] = Proxy(self, val, k)
         # build the proxies hierarchy from the top level
         for k in h5f.keys():
             # if a key in a file isn't in this class, attach a base Array
-            feature = getattr(type(self), k, setattr(self, k, Array()))
+            feature = getattr(type(self), k, setattr(self, k, Feature()))
             if isinstance(h5f[k], h5py.Group):
                 self.__dict__[k] = Proxy.from_group(self, feature, h5f[k])
             else:
                 self.__dict__[k] = Proxy(self, feature, h5f[k].parent.name, k, dict(h5f[k].attrs))
-        self.update_refs()
+        self.build_refs()
 
-    def update_refs(self):
+    def build_refs(self):
         if hasattr(self, SRC_KEY):
             h5f = self.handle(self.mode)
             ids = getattr(getattr(self, SRC_KEY), "id", [])[:]
@@ -311,12 +317,12 @@ class FileType:
     @classmethod
     def load(cls, source, schema={}):
         if not schema:
-            schema = {attr: val for attr, val in cls.__dict__.items() if isinstance(val, Array)}
-        return _load(source, schema, guard_func=Array.load)
+            schema = {attr: val for attr, val in cls.__dict__.items() if isinstance(val, Feature)}
+        return _load(source, schema, guard_func=Feature.load)
 
     def _attach_new_children(self, data, handle):
         for new in data.keys():
-            feature = getattr(type(self), new, setattr(self, new, Array()))
+            feature = getattr(type(self), new, setattr(self, new, Feature()))
             proxy = Proxy.from_group(self, feature, handle[new])
             self.__dict__[new] = proxy
 
@@ -325,14 +331,18 @@ class FileType:
         kwargs = {k: getattr(v, "__ds_kwargs__", {}) for k, v in self.__dict__.items() if isinstance(v, Proxy)}
         data = flatten_dict(data)
         _add.source(h5f, source, data, kwargs, set(self.refs.columns))
-        self.rebuild()
+        self.build_proxies()
         return self
 
     def get(self, source):
         return {k: v.get(source)
                 for k, v in self.__dict__.items() if isinstance(v, Proxy)}
 
-    def get_feat(self, name):
+    def set(self, source, val):
+        pass
+
+    def get_proxy(self, name):
+        """get the proxy for an h5 name, e.g. ``'net/fc.weight'``"""
         name = name.strip("/").split('/')
         return reduce(getattr, name, self)
 
@@ -368,9 +378,9 @@ class FileType:
         h5f.close()
 
     def serve(self, batch, **loader_kwargs):
-        ds = DefaultDataset(self, batch)
+        ds = ProgrammableDataset(self, batch)
         return DataLoader(ds, **loader_kwargs)
 
 
 def filetype(name, schema):
-    return type(name, (FileType,), schema)
+    return type(name, (TypedFile,), schema)

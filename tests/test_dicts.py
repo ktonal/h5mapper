@@ -1,13 +1,13 @@
 import pytest
 
-from h5m import *
+from h5mapper import *
 from .utils import *
 
 
 @pytest.fixture
 def dict_db(tmp_db):
 
-    class DB(FileType):
+    class DB(TypedFile):
         d = Dict()
 
     sources = tuple(map(str, range(8)))
@@ -124,7 +124,7 @@ def test_proxy_api(dict_db, keep_open):
 @pytest.fixture
 def dict_of_dict_db(tmp_db):
 
-    class DB(FileType):
+    class DB(TypedFile):
         d = DictofDict()
 
     sources = tuple(map(str, range(8)))

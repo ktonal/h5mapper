@@ -1,7 +1,7 @@
 import pytest
 
-from h5m import *
-from h5m import FileType
+from h5mapper import *
+from h5mapper import TypedFile
 
 from .utils import *
 
@@ -22,7 +22,7 @@ def custom_h5(tmp_path):
 def test_maps_custom_h5file(custom_h5):
 
     h5f = h5py.File(custom_h5, "r")
-    db = FileType(custom_h5, "r")
+    db = TypedFile(custom_h5, "r")
     assert hasattr(db, "g1") and isinstance(db.g1, Proxy)
     assert hasattr(db, "g2") and isinstance(db.g2, Proxy)
     assert hasattr(db.g1, "d1") and isinstance(db.g1.d1, Proxy)
@@ -35,9 +35,9 @@ def test_maps_custom_h5file(custom_h5):
 
 
 def test_handler(custom_h5):
-    db = FileType(custom_h5, "r")
-    assert isinstance(db, FileType)
-    copy = FileType(db.filename)
+    db = TypedFile(custom_h5, "r")
+    assert isinstance(db, TypedFile)
+    copy = TypedFile(db.filename)
     copy.keep_open = True
     # check that there is only one handler that stays open
     h1 = copy.handle('r')
@@ -62,13 +62,13 @@ def test_handler(custom_h5):
     rv = db.load("42")
     assert isinstance(rv, dict)
 
-    assert "FileType" in repr(db)
+    assert "TypedFile" in repr(db)
 
     db.info()
 
 
 def test_crud_api(custom_h5):
-    db = FileType(custom_h5, "r+")
+    db = TypedFile(custom_h5, "r+")
     db.add("0", {
         # new feature
         "g3": {"d3": np.random.randn(1, 100)},
@@ -81,7 +81,7 @@ def test_crud_api(custom_h5):
 
 
 def test_in_mem():
-    db = in_mem(FileType)
+    db = in_mem(TypedFile)
     assert bool(db.handle("h5py"))
     assert not os.path.isfile(db.filename)
     db.add("0", {"ds": np.random.rand(3, 4, 5)})

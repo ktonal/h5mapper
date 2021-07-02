@@ -1,7 +1,8 @@
-import h5m
 import click
 import os
 from time import time
+
+import h5mapper as h5m
 
 """
 CLI for an Image Bank
@@ -21,7 +22,7 @@ def main(target, source, no_vshape=False, parallelism='mp', n_workers=8):
     N = len(files)
     click.echo(f"consolidating {N} files into '{target}'...")
     start = time()
-    # dynamically create a FileType
+    # dynamically create a TypedFile
     ftp = h5m.filetype('ImageBank', dict(
         img=h5m.Image() if no_vshape else h5m.VShape(h5m.Image()),
         labels=h5m.DirLabels()

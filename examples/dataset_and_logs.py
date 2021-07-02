@@ -4,7 +4,7 @@ import numpy as np
 import os
 from tqdm import tqdm
 
-import h5m
+import h5mapper as h5m
 
 
 # the model we'll be training
@@ -49,7 +49,7 @@ class Example(h5m.Array):
 
 
 # Our Dataset
-class Dataset(h5m.FileType, torch.utils.data.Dataset):
+class Dataset(h5m.TypedFile, torch.utils.data.Dataset):
 
     data = Example()
 
@@ -68,7 +68,7 @@ class Dataset(h5m.FileType, torch.utils.data.Dataset):
 
 
 # While consuming `train`, we will write to `logs` :
-class ExerimentData(h5m.FileType):
+class ExerimentData(h5m.TypedFile):
     # those are initialized from 1st add(...) statement
     loss = h5m.Array()
     acc = h5m.Array()
@@ -90,7 +90,7 @@ class ExerimentData(h5m.FileType):
         ax2.set_title("accuracy")
 
         # because of the ".", we have to use get_feat() - or getattr(self.ckpts, "fc1.weight")
-        w = self.get_feat("ckpts/fc1.weight")
+        w = self.get_proxy("ckpts/fc1.weight")
         epochs = self.__src__.id[w.refs[()].astype(np.bool)]
         f, axs = plt.subplots(1, len(epochs))
         for i, ep in enumerate(sorted(epochs)):

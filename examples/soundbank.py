@@ -1,7 +1,8 @@
-import h5m
 import click
 import os
 from time import time
+
+import h5mapper as h5m
 
 """
 CLI for a Sound Bank
@@ -23,7 +24,7 @@ def main(target, source, sr=22050, mono=True, normalize=True, parallelism='mp', 
     N = len(files)
     click.echo(f"consolidating {N} files into '{target}'...")
     start = time()
-    # dynamically create a FileType
+    # dynamically create a TypedFile
     ftp = h5m.filetype('SoundBank', dict(
         snd=h5m.Sound(sr=sr, mono=mono, normalize=normalize)
     ))

@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import pytest
-from h5m import Array
+from h5mapper import Array
 
 
 @pytest.fixture
@@ -86,7 +86,7 @@ class AfterFeature(FeatWithAttrs):
 
     def after_create(self, db, feature_key):
         print(self, feature_key)
-        feat = db.get_feat(feature_key)
+        feat = db.get_proxy(feature_key)
         # modify the feature in-place (file should be open for write)
         feat[:] = np.zeros_like(feat[:])
         return None
