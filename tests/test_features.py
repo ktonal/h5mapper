@@ -110,7 +110,6 @@ def test_group(tmp_db):
     assert isinstance(DB.g.load("any"), dict)
 
 
-# TODO
 def test_state_dict(tmp_path):
     class Net(nn.Module):
         def __init__(self):
@@ -133,7 +132,7 @@ def test_state_dict(tmp_path):
 
     db = DB.create(tmp_path / "sd.h5", source)
     assert isinstance(db, DB)
-    got = db.get(db.refs.index[0])["sd"]
+    got = db.get(list(db.index.keys())[0])["sd"]
     assert "fc.weight" in got and "cv.weight" in got
     net.load_state_dict(got)
     assert isinstance(net, Net)

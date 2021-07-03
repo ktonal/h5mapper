@@ -66,23 +66,23 @@ class Proxy:
         # we "lift up" x/__arr__ or x/__df__ to attributes named "x"
         if NP_KEY in group.keys():
             root = Proxy(owner, feature, group.name, NP_KEY, attrs)
-        else:
-            root = Proxy(owner, feature, group.name, "", attrs)
-        if REF_KEY in group.keys():
             refs = Proxy(owner, None, group.name, REF_KEY)
             setattr(root, "refs", refs)
+        else:
+            root = Proxy(owner, feature, group.name, "", attrs)
         # recursively add children as attributes before returning the object
+        root.children = {}
+        reserved = dict(REF_KEY='refs', SRC_KEY='src')
         for k in group.keys():
             if isinstance(group[k], h5py.Group):
                 child = Proxy.from_group(owner, feature, group[k])
             else:
                 attrs = {k: None if v == H5_NONE else v for k, v in group[k].attrs.items()}
                 child = Proxy(owner,
-                              None if any(k in reserved
-                                          for reserved in [REF_KEY, SRC_KEY])
-                              else feature,
+                              None if k in reserved else feature,
                               group.name, "/" + k, attrs)
-            setattr(root, k, child)
+            setattr(root, reserved.get(k, k), child)
+            root.children[reserved.get(k, k)] = child
         return root
 
     def __init__(self, owner, feature, group_name, key="", attrs={}):
@@ -94,7 +94,6 @@ class Proxy:
         self.is_group = not bool(key)
         if not self.is_group:
             # copy some of the dataset properties
-            # with a non-disruptive handler (hopefully...)
             was_open = bool(self.owner.f_)
             h5f = self.handle("r")
             ds = h5f[self.name]
@@ -157,52 +156,54 @@ class Proxy:
     def __repr__(self):
         return f"<Proxy {self.name}>"
 
+    def get(self, source):
+        if self.is_group:
+            return self._getgrp(source)
+        if hasattr(self, 'refs'):
+            r = self.refs[self.owner.index[source]]
+            if r:
+                return self[r]
+        return None
+
     def _getgrp(self, src: str):
-        """getitem for groups - here items are the sources' ids"""
+        if SRC_KEY in self.name:
+            return None
         # item is a source name
         if isinstance(src, str):
-            refs = self.owner.refs.loc[src]
             out = {}
-            for ref, k in zip(refs.values, refs.index):
-                if self.name not in k or not ref:
-                    continue
-                k = k.replace(self.name, "")
-                k = k.split("/")
-                if len(k) > 1:
-                    out[k[0]] = getattr(self, k[0])[src]
-                else:
-                    k = k[0]
-                    proxy = getattr(self, k)
-                    o = proxy[ref]
-                    out[k] = o
+            for k, proxy in self.children.items():
+                rv = proxy.get(src)
+                if rv is not None:
+                    out[k] = rv
             if getattr(self, "__grp_t__", tuple()):
                 out = reduce(lambda x, func: func(x), getattr(self, '__grp_t__'), out)
             return out
         else:
             raise TypeError(f"item should be of type str. Got {type(src)}")
 
+    def set(self, source, data):
+        if self.is_group:
+            return self._setgrp(source, data)
+        else:
+            r = self.refs[self.owner.index[source]]
+            if r:
+                self[r] = data
+            else:
+                r = _add.array(self.handle('r+'), self.name, data)
+                self.refs[self.owner.index[source]] = r
+
     def _setgrp(self, src: str, value: dict):
         """setitem for groups - here items are the sources' ids"""
+        if SRC_KEY in self.name:
+            return
         if isinstance(src, str):
-            # item = source name
-            try:
-                refs = self.owner.refs.loc[src]
-            except KeyError:
+            if src not in self.owner.index:
                 self.add(src, value)
                 return
-            refs, ks = refs.values, refs.index
-            for ref, k in zip(refs, ks):
-                if self.name not in k or not ref:
-                    continue
-                k = k.replace(self.name, "")
-                k = k.split("/")
-                if len(k) > 1:
-                    proxy = getattr(self, k[0])
-                    proxy[src] = value[k[0]]
-                else:
-                    k = k[0]
-                    proxy = getattr(self, k)
-                    proxy[ref] = value[k]
+            # item = source name
+            for k, proxy in self.children.items():
+                if k in value:
+                    proxy.set(src, value[k])
             self._attach_new_children(value)
         else:
             raise TypeError(f"item should be of type str. Got {type(src)}")
@@ -211,35 +212,27 @@ class Proxy:
         new_feats = {k for k in data.keys() if getattr(self, k, None) is None}
         for new in new_feats:
             key = NP_KEY if isinstance(data[new], np.ndarray) else ""
-            setattr(self, new, Proxy(self.owner, self.feature, self.name + new, key))
+            proxy = Proxy(self.owner, self.feature, self.name + new, key)
+            if key is NP_KEY:
+                setattr(proxy, "refs", Proxy(self.owner, None, self.name + new, REF_KEY))
+            setattr(self, new, proxy)
+            self.children[new] = proxy
 
     def add(self, source, data):
         h5f = self.handle("r+" if self.owner.mode not in ("w", "r+", "a") else self.owner.mode)
         data_prefixed = flatten_dict(data, prefix=self.group_name.strip("/"))
-        _add.source(h5f, source, data_prefixed, self.feature.__ds_kwargs__, set(self.owner.refs.columns))
+        _add.source(h5f, source, data_prefixed, self.feature.__ds_kwargs__, self.owner.refed)
         self.owner.build_refs()
         if isinstance(data, dict):
             self._attach_new_children(data)
         return self
 
-    def get(self, source):
-        if self.is_group:
-            return self._getgrp(source)
-        return self[self.refs[self.owner.refs.index.get_loc(source)]]
-
-    def set(self, source, data):
-        if self.is_group:
-            return self._setgrp(source, data)
-        else:
-            self[self.refs[self.owner.refs.index.get_loc(source)]] = data
-
     def iset(self, source, idx, data):
         if self.is_group:
-            # print("ISET GRP")
             return self._setgrp(source, data)
         else:
             ds = self.handle()[self.name]
-            ref = self.refs[self.owner.refs.index.get_loc(source)]
+            ref = self.refs[self.owner.index[source]]
             # get the MultiBlockSlice behind the regionref :
             mbs = h5py.h5r.get_region(ref, ds.id).get_regular_hyperslab()
             # mbs[0][0] is the first index of the first axis of the region
@@ -263,7 +256,7 @@ class TypedFile:
                 self.__dict__[k] = Proxy(self, val, k)
         # build the proxies hierarchy from the top level
         for k in h5f.keys():
-            # if a key in a file isn't in this class, attach a base Array
+            # if a key in a file isn't in this class, attach a base Feature
             feature = getattr(type(self), k, setattr(self, k, Feature()))
             if isinstance(h5f[k], h5py.Group):
                 self.__dict__[k] = Proxy.from_group(self, feature, h5f[k])
@@ -273,14 +266,13 @@ class TypedFile:
 
     def build_refs(self):
         if hasattr(self, SRC_KEY):
-            h5f = self.handle(self.mode)
             ids = getattr(getattr(self, SRC_KEY), "id", [])[:]
+            self.index = dict(zip(ids, range(len(ids))))
             paths = getattr(getattr(self, SRC_KEY), "refed", [])[:]
-            refs = [h5f[p + "/" + REF_KEY][()] for p in paths]
-            self.refs = pd.DataFrame(np.stack(refs, axis=1) if len(refs) else [],
-                                     columns=paths, index=ids)
+            self.refed = set(paths)
         else:
-            self.refs = pd.DataFrame([])
+            self.index = {}
+            self.refed = set()
 
     @classmethod
     def create(cls,
@@ -330,7 +322,7 @@ class TypedFile:
         h5f = self.handle(mode="r+" if self.mode not in ("w", "r+", "a") else self.mode)
         kwargs = {k: getattr(v, "__ds_kwargs__", {}) for k, v in self.__dict__.items() if isinstance(v, Proxy)}
         data = flatten_dict(data)
-        _add.source(h5f, source, data, kwargs, set(self.refs.columns))
+        _add.source(h5f, source, data, kwargs, self.refed)
         self.build_proxies()
         return self
 

@@ -73,10 +73,15 @@ class Feature:
 
 
 class Array(Feature):
-    pass
+
+    def __init__(self, pattern=None, **ds_kwargs):
+        if pattern is not None:
+            self.__re__ = pattern
+        if ds_kwargs:
+            self.__ds_kwargs__.update(ds_kwargs)
 
 
-class Group(Array):
+class Group(Feature):
 
     def __init__(self, **features):
         for k, v in features.items():
@@ -91,15 +96,15 @@ class Group(Array):
                          for item in f.attrs.items()))
 
     def load(self, source):
-        return _load(source, self.features, guard_func=Array.load)
+        return _load(source, self.features, guard_func=Feature.load)
 
     def after_create(self, db, feature_key):
         for feat in self.features.values():
-            if getattr(type(feat), "after_create", Array.after_create) != Array.after_create:
+            if getattr(type(feat), "after_create", Feature.after_create) != Feature.after_create:
                 feat.after_create(db, feature_key + "/" + feat.name)
 
 
-class TensorDict(Array):
+class TensorDict(Feature):
     __re__ = r".*ckpt$"
     __ds_kwargs__ = dict()
 
@@ -127,8 +132,7 @@ class TensorDict(Array):
 
 class Image(Array):
     __re__ = r"png$|jpeg$"
-    __ds_kwargs__ = dict(
-    )
+    __ds_kwargs__ = dict()
 
     @property
     def attrs(self):
@@ -158,7 +162,7 @@ class Sound(Array):
         return y
 
 
-class VShape(Array):
+class VShape(Feature):
     __grp_t__ = (
         lambda d: d["arr"].reshape(*d["shape_"]),
     )
@@ -180,7 +184,7 @@ class VShape(Array):
         return {"arr": arr.reshape(-1), "shape_": np.array(arr.shape)}
 
 
-class Vocabulary(Array):
+class Vocabulary(Feature):
 
     def __init__(self, derived_from):
         self.derived_from = derived_from
@@ -201,7 +205,7 @@ class Vocabulary(Array):
         self.V = dict(self.V)
 
 
-class DirLabels(Array):
+class DirLabels(Feature):
 
     def __init__(self):
         self.d2i = Manager().dict()

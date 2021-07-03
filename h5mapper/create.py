@@ -6,7 +6,7 @@ from functools import partial
 
 from tqdm import tqdm
 
-from .features import Array
+from .features import Feature
 from .crud import _add, _load, H5_NONE, SRC_KEY
 from .utils import flatten_dict
 
@@ -28,7 +28,7 @@ def _create(cls,
             ):
     if not schema:
         # get schema from the class attributes
-        schema = {attr: val for attr, val in cls.__dict__.items() if isinstance(val, Array)}
+        schema = {attr: val for attr, val in cls.__dict__.items() if isinstance(val, Feature)}
     if not schema:
         raise ValueError("schema cannot be empty. Either provide one to create()"
                          " or attach Array attributes to this class.")
@@ -67,7 +67,7 @@ def _create(cls,
         end_loc = min([(i + 1) * batch_size, n_sources])
         this_sources = sources[start_loc:end_loc]
         try:
-            results = executor.map(partial(_load, schema=schema, guard_func=Array.load), this_sources)
+            results = executor.map(partial(_load, schema=schema, guard_func=Feature.load), this_sources)
         except Exception as e:
             f.close()
             if mode == "w":
@@ -89,7 +89,7 @@ def _create(cls,
     # run after_create
     db = cls(filename, mode="r+", keep_open=False)
     for key, feature in schema.items():
-        if getattr(type(feature), "after_create", Array.after_create) != Array.after_create:
+        if getattr(type(feature), "after_create", Feature.after_create) != Feature.after_create:
             feature.after_create(db, key)
             f.flush()
     # voila!
