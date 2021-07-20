@@ -1,6 +1,5 @@
 import h5py
 import numpy as np
-import pandas as pd
 from torch.utils.data import DataLoader
 from multiprocessing import cpu_count
 import os
@@ -13,6 +12,14 @@ from .features import Feature
 from .serve import ProgrammableDataset
 from .crud import _load, _add, NP_KEY, SRC_KEY, REF_KEY, H5_NONE
 from .utils import flatten_dict
+
+
+__all__ = [
+    'as_temp',
+    'in_mem',
+    'TypedFile',
+    'typedfile'
+]
 
 
 def as_temp(filename):
@@ -221,7 +228,7 @@ class Proxy:
     def add(self, source, data):
         h5f = self.handle("r+" if self.owner.mode not in ("w", "r+", "a") else self.owner.mode)
         data_prefixed = flatten_dict(data, prefix=self.group_name.strip("/"))
-        _add.source(h5f, source, data_prefixed, self.feature.__ds_kwargs__, self.owner.refed)
+        _add.source(h5f, source, data_prefixed, self.feature.__ds_kwargs__, self.owner.ds_keys)
         self.owner.build_refs()
         if isinstance(data, dict):
             self._attach_new_children(data)
@@ -268,11 +275,11 @@ class TypedFile:
         if hasattr(self, SRC_KEY):
             ids = getattr(getattr(self, SRC_KEY), "id", [])[:]
             self.index = dict(zip(ids, range(len(ids))))
-            paths = getattr(getattr(self, SRC_KEY), "refed", [])[:]
-            self.refed = set(paths)
+            ds_keys = getattr(getattr(self, SRC_KEY), "ds_keys", [])[:]
+            self.ds_keys = set(ds_keys)
         else:
             self.index = {}
-            self.refed = set()
+            self.ds_keys = set()
 
     @classmethod
     def create(cls,
@@ -322,7 +329,7 @@ class TypedFile:
         h5f = self.handle(mode="r+" if self.mode not in ("w", "r+", "a") else self.mode)
         kwargs = {k: getattr(v, "__ds_kwargs__", {}) for k, v in self.__dict__.items() if isinstance(v, Proxy)}
         data = flatten_dict(data)
-        _add.source(h5f, source, data, kwargs, self.refed)
+        _add.source(h5f, source, data, kwargs, self.ds_keys)
         self.build_proxies()
         return self
 
@@ -374,5 +381,9 @@ class TypedFile:
         return DataLoader(ds, **loader_kwargs)
 
 
-def filetype(name, schema):
+def typedfile(name, schema):
     return type(name, (TypedFile,), schema)
+
+
+# TODO : SingleID object ~ TypedFile with only one ref (copy? mask? link?...) for concatenating datasets
+

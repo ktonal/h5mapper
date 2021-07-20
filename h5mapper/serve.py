@@ -181,7 +181,7 @@ class ProgrammableDataset(Dataset):
     Dataset whose __getitem__ method is specified by a batch object passed to its constructor.
 
     The batch object can be of any type supported by torch's default collate function (Mapping, Sequence, etc.)
-    and should contain "batch-items" (``h5m.Input`` or ``h5m.Target``).
+    and should contain batch items (``h5m.Input`` or ``h5m.Target``).
     """
 
     def __init__(self, file, batch=tuple()):

@@ -1,15 +1,17 @@
 import h5py
 import numpy as np
-import os
 import re
 from functools import reduce
 
-H5_NONE = h5py.Empty(np.dtype("S10"))
-with h5py.File("/tmp/__dummy.h5", 'w') as f:
-    ds = f.create_dataset('regref', shape=(1,), dtype=h5py.regionref_dtype)
-    null_regref = ds[0]
-os.remove("/tmp/__dummy.h5")
+__all__ = [
+    '_load',
+    '_add',
+    'NP_KEY', "SRC_KEY", "REF_KEY",
+    'null_regref'
+]
 
+H5_NONE = h5py.Empty(np.dtype("S10"))
+null_regref = None
 NP_KEY = "__arr__"
 SRC_KEY = "__src__"
 REF_KEY = "__ref__"
@@ -133,7 +135,7 @@ class _add:
                 _add.array(file, r + "/" + REF_KEY,
                            np.array([null_regref] * (n_ids - 1)),
                            dict(dtype=h5py.regionref_dtype))
-            _add.array(file, SRC_KEY + "/refed", np.array([r]),
+            _add.array(file, SRC_KEY + "/ds_keys", np.array([r]),
                        dict(dtype=h5py.string_dtype(encoding='utf-8')))
         # add null ref for refed paths not in refs
         for r in (refed - refs.keys()):

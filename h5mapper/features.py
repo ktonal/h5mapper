@@ -14,6 +14,19 @@ from .crud import _load
 warnings.filterwarnings("ignore", message="PySoundFile failed.")
 
 
+__all__ = [
+    'Feature',
+    'Array',
+    'Group',
+    "TensorDict",
+    "Image",
+    "Sound",
+    "VShape",
+    "Vocabulary",
+    "DirLabels"
+]
+
+
 class Feature:
     # re to match sources
     __re__ = r".*"

@@ -60,7 +60,7 @@ def _create(cls,
 
     # run loading routine
     n_sources = len(sources)
-    batch_size = n_workers * 4
+    batch_size = n_workers * 1
     refed_paths = set()
     for i in tqdm(range(1 + n_sources // batch_size), leave=False):
         start_loc = max([i * batch_size, 0])
