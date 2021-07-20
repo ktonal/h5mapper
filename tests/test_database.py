@@ -1,4 +1,6 @@
 import pytest
+import h5py
+import os
 
 from h5mapper import *
 from h5mapper import TypedFile

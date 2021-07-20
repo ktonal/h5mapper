@@ -18,6 +18,7 @@ __all__ = [
     'as_temp',
     'in_mem',
     'TypedFile',
+    'Proxy',
     'typedfile'
 ]
 

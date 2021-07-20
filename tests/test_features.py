@@ -1,5 +1,6 @@
+import torch
 import torch.nn as nn
-
+import h5py
 from h5mapper import *
 
 from .utils import *
