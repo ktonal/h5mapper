@@ -117,6 +117,10 @@ class AsFramedSlice(AsSlice):
     frame_size: int = 1
     as_strided: bool = False
 
+    def __post_init__(self):
+        if self.as_strided:
+            self.length += self.frame_size - 1
+
     def __call__(self, proxy, item):
         sliced = super(AsFramedSlice, self).__call__(proxy, item)
         if self.as_strided:
@@ -139,11 +143,18 @@ class AsFramedSlice(AsSlice):
 class Input:
     """read and transform data from a specific key/proxy in a .h5 file"""
     key: str = ''
+    proxy: "Proxy" = None
     getter: Getter = Getter()
-    transform: Callable = lambda x: x
+    transform: Callable[[np.ndarray], np.ndarray] = lambda x: x
+
+    def __post_init__(self):
+        self.get_object = lambda file: self.proxy if self.proxy is not None else lambda file: getattr(file, self.key)
 
     def __len__(self):
         return len(self.getter)
+
+    def __call__(self, file, item):
+        return self.transform(self.getter(self.get_object(file), item))
 
 
 class Target(Input):
@@ -192,9 +203,9 @@ class ProgrammableDataset(Dataset):
             # pass the lengths of the db features to the getters
             if feat.getter.n is None:
                 if isinstance(feat.getter, GetId):
-                    n = sum(getattr(file, feat.key).refs[()].astype(np.bool))
+                    n = sum(feat.get_object(file).refs[()].astype(np.bool))
                 else:
-                    n = len(getattr(self.file, feat.key))
+                    n = len(feat.get_object(file))
                 setattr(feat.getter, 'n', n)
             return feat
 
@@ -211,7 +222,7 @@ class ProgrammableDataset(Dataset):
 
     def __getitem__(self, item):
         def get_data(feat):
-            return feat.transform(feat.getter(getattr(self.file, feat.key), item))
+            return feat(self.file, item)
 
         return process_batch(self.batch, _is_batchitem, get_data)
 
@@ -219,4 +230,5 @@ class ProgrammableDataset(Dataset):
         return self.N
 
     def __del__(self):
-        self.file.close()
+        if hasattr(self.file, 'close'):
+            self.file.close()

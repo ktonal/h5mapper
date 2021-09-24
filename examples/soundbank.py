@@ -25,7 +25,7 @@ def main(target, source, sr=22050, mono=True, normalize=True, parallelism='mp', 
     click.echo(f"consolidating {N} files into '{target}'...")
     start = time()
     # dynamically create a TypedFile
-    ftp = h5m.filetype('SoundBank', dict(
+    ftp = h5m.typedfile('SoundBank', dict(
         snd=h5m.Sound(sr=sr, mono=mono, normalize=normalize)
     ))
     # parallel job

@@ -230,7 +230,7 @@ class Proxy:
         h5f = self.handle("r+" if self.owner.mode not in ("w", "r+", "a") else self.owner.mode)
         data_prefixed = flatten_dict(data, prefix=self.group_name.strip("/"))
         _add.source(h5f, source, data_prefixed, self.feature.__ds_kwargs__, self.owner.ds_keys)
-        self.owner.build_refs()
+        self.owner.build_proxies()
         if isinstance(data, dict):
             self._attach_new_children(data)
         return self
@@ -246,6 +246,12 @@ class Proxy:
             # mbs[0][0] is the first index of the first axis of the region
             ds[mbs[0][0] + idx] = data
 
+    def close(self):
+        return self.owner.close()
+
+    def flush(self):
+        return self.owner.flush()
+
 
 class TypedFile:
 
@@ -255,6 +261,7 @@ class TypedFile:
         self.h5_kwargs = h5_kwargs
         self.keep_open = keep_open
         self.f_: Optional[h5py.File] = None
+        self.init_schema()
         self.build_proxies()
 
     def build_proxies(self):
@@ -302,6 +309,15 @@ class TypedFile:
                        parallelism,
                        keep_open,
                        **h5_kwargs)
+
+    def init_schema(self):
+        h5 = self.handle(self.mode)
+        for attr, val in type(self).__dict__.items():
+            if isinstance(val, Feature):
+                h5.require_group(attr)
+        h5.require_group(SRC_KEY)
+        self.build_proxies()
+        return self
 
     def handle(self, mode=None):
         """
@@ -353,6 +369,9 @@ class TypedFile:
     def close(self):
         if self.f_:
             self.f_.close()
+            if self.mode == "w":
+                # reopening a created doesn't overwrite it
+                self.mode = 'r+'
 
     def __del__(self):
         self.close()

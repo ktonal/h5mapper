@@ -31,8 +31,7 @@ def _create(cls,
         schema = {attr: val for attr, val in cls.__dict__.items() if isinstance(val, Feature)}
     if not schema:
         raise ValueError("schema cannot be empty. Either provide one to create()"
-                         " or attach Array attributes to this class.")
-    # create two separate files for arrays and dataframes
+                         " or attach Feature attributes to this class.")
     f = h5py.File(filename, mode, **h5_kwargs)
     f.require_group(SRC_KEY)
     # create groups from schema and write attrs

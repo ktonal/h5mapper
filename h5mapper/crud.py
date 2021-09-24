@@ -73,6 +73,10 @@ def _load(source, schema={}, guard_func=None):
     return out
 
 
+def _map(source, func_dict):
+    return {k: f(source) for k, f in func_dict.items()}
+
+
 class _add:
     """
     methods to append (create if need be) different types of data to h5Groups/HDFStores

@@ -23,7 +23,7 @@ def main(target, source, no_vshape=False, parallelism='mp', n_workers=8):
     click.echo(f"consolidating {N} files into '{target}'...")
     start = time()
     # dynamically create a TypedFile
-    ftp = h5m.filetype('ImageBank', dict(
+    ftp = h5m.typedfile('ImageBank', dict(
         img=h5m.Image() if no_vshape else h5m.VShape(h5m.Image()),
         labels=h5m.DirLabels()
     ))
