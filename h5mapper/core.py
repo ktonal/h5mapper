@@ -256,6 +256,8 @@ class Proxy:
 class TypedFile:
 
     def __init__(self, filename, mode="r", keep_open=False, **h5_kwargs):
+        self.ds_keys = set()
+        self.index = {}
         self.filename = filename
         self.mode = mode
         self.h5_kwargs = h5_kwargs
@@ -285,9 +287,6 @@ class TypedFile:
             self.index = dict(zip(ids, range(len(ids))))
             ds_keys = getattr(getattr(self, SRC_KEY), "ds_keys", [])[:]
             self.ds_keys = set(ds_keys)
-        else:
-            self.index = {}
-            self.ds_keys = set()
 
     @classmethod
     def create(cls,
@@ -311,6 +310,9 @@ class TypedFile:
                        **h5_kwargs)
 
     def init_schema(self):
+        if self.mode == 'r':
+            self.build_proxies()
+            return self
         h5 = self.handle(self.mode)
         for attr, val in type(self).__dict__.items():
             if isinstance(val, Feature):
