@@ -9,6 +9,7 @@ import collections
 
 
 __all__ = [
+    'Getter',
     'AsSlice',
     'AsFramedSlice',
     'GetId',
@@ -59,19 +60,18 @@ class Getter:
 class GetId(Getter):
 
     def __call__(self, proxy, item):
-        # TODO : this should index directly into the array of
-        #  valid ids for this proxy (owners may have more ids than
-        #  any of their proxies...)
-        return proxy.get(proxy.owner.refs.index[item])
+        return proxy[proxy.refs[item]]
 
 
-@dtc.dataclass()
+@dtc.dataclass
 class AsSlice(Getter):
     """
     maps an ``item`` to a slice of data
 
     Parameters
     ----------
+    dim : int
+        the dimension to slice
     shift : int
         the slice will start at the index `item + shift`
     length : int
@@ -100,13 +100,18 @@ class AsSlice(Getter):
 
        [4, 5, 6]
     """
+    dim: int = 0
     shift: int = 0
     length: int = 1
     stride: int = 1
 
+    def __post_init__(self):
+        self.pre_slices = (slice(None),) * self.dim
+
     def __call__(self, proxy, item):
         i = item * self.stride
-        return proxy[slice(i + self.shift, i + self.shift + self.length)]
+        slc = slice(i + self.shift, i + self.shift + self.length)
+        return proxy[self.pre_slices + (slc, )]
 
     def __len__(self):
         return (self.n - (self.shift + self.length) + 1) // self.stride
@@ -148,7 +153,9 @@ class Input:
     transform: Callable[[np.ndarray], np.ndarray] = lambda x: x
 
     def __post_init__(self):
-        self.get_object = lambda file: self.proxy if self.proxy is not None else lambda file: getattr(file, self.key)
+        self.get_object = lambda file: self.proxy \
+            if self.proxy is not None\
+            else lambda file: getattr(file, self.key)
 
     def __len__(self):
         return len(self.getter)

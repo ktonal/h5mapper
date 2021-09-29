@@ -36,7 +36,7 @@ def main(target, source, sr=22050, mono=True, normalize=True, parallelism='mp', 
     click.echo(f"stored {N} files in {'%.3f' % dur} seconds")
 
     # it's just a demo...
-    os.remove(target)
+    # os.remove(target)
 
 
 if __name__ == '__main__':

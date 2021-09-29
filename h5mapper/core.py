@@ -378,7 +378,7 @@ class TypedFile:
     def open(self, mode):
         self.mode = mode
         return self
-    
+
     def __enter__(self):
         return self
 
