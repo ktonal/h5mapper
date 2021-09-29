@@ -69,7 +69,7 @@ class Proxy:
         proxy : Proxy
             a proxy to `group` with the children attached as attributes
         """
-        attrs = {k: None if not isinstance(v, np.ndarray) and v == H5_NONE else v
+        attrs = {k: None if not isinstance(v, (np.ndarray, np.void)) and v == H5_NONE else v
                  for k, v in group.attrs.items()}
         # we "lift up" x/__arr__ or x/__df__ to attributes named "x"
         if NP_KEY in group.keys():
@@ -111,7 +111,7 @@ class Proxy:
             if not was_open:
                 h5f.close()
 
-    def handle(self, mode="r"):
+    def handle(self, mode=None):
         """
         to accommodate torch's DataLoader, h5py.File objects
         are requested in __getitem__ and __setitem__ by proxies, but
@@ -266,8 +266,20 @@ class TypedFile:
         self.init_schema()
         self.build_proxies()
 
+    def init_schema(self):
+        if self.mode == 'r':
+            self.build_proxies()
+            return self
+        h5 = self.handle()
+        for attr, val in type(self).__dict__.items():
+            if isinstance(val, Feature):
+                h5.require_group(attr)
+        h5.require_group(SRC_KEY)
+        self.build_proxies()
+        return self
+
     def build_proxies(self):
-        h5f = self.handle(self.mode)
+        h5f = self.handle()
         for k, val in type(self).__dict__.items():
             if isinstance(val, Feature):
                 self.__dict__[k] = Proxy(self, val, k)
@@ -309,18 +321,6 @@ class TypedFile:
                        keep_open,
                        **h5_kwargs)
 
-    def init_schema(self):
-        if self.mode == 'r':
-            self.build_proxies()
-            return self
-        h5 = self.handle(self.mode)
-        for attr, val in type(self).__dict__.items():
-            if isinstance(val, Feature):
-                h5.require_group(attr)
-        h5.require_group(SRC_KEY)
-        self.build_proxies()
-        return self
-
     def handle(self, mode=None):
         """
         """
@@ -330,7 +330,10 @@ class TypedFile:
                 self.close()
                 self.f_ = h5py.File(self.filename, mode, **self.h5_kwargs)
             return self.f_
-        return h5py.File(self.filename, mode, **self.h5_kwargs)
+        h = h5py.File(self.filename, mode, **self.h5_kwargs)
+        if mode == self.mode == 'w':
+            self.mode = 'r+'
+        return h
 
     @classmethod
     def load(cls, source, schema={}):

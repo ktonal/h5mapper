@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import librosa
 import imageio
+import pickle
 import os
 import dataclasses as dtc
 from functools import partial
@@ -37,6 +38,8 @@ class Feature:
     # transforms at the group level
     __grp_t__ = ()
 
+    _proxy = None
+
     @property
     def attrs(self):
         return {}
@@ -48,18 +51,31 @@ class Feature:
         if obj is None:
             # access from the class object
             return self
+        if self._proxy is not None:
+            return self._proxy
         # when accessed from an instance,
         # user expects a Proxy that should already be
         # in obj's __dict__
         if self.name not in obj.__dict__:
-            raise RuntimeError(f"Array '{self.name}' has not been properly attached to its parent object {obj},"
+            raise RuntimeError(f"Feature '{self.name}' has not been properly attached to its parent object {obj},"
                                " it cannot mirror any h5 object.")
         proxy = obj.__dict__[self.name]
+        self._proxy = proxy
         return proxy
 
     def __set__(self, obj, value):
         obj.__dict__[self.name] = value
         return value
+
+    def __getattr__(self, item):
+        if item in self.__dict__:
+            return self.__dict__[item]
+        if item in self._proxy.__dict__:
+            return self._proxy.__dict__[item]
+        if item in type(self._proxy).__dict__:
+            return getattr(self._proxy, item)
+        else:
+            raise AttributeError(f"object of type {self.__class__.__qualname__} has no attribute '{item}'")
 
     def load(self, source):
         raise NotImplementedError
@@ -141,6 +157,12 @@ class TensorDict(Feature):
     @staticmethod
     def format(state_dict):
         return depth_first_apply(state_dict, lambda t: np.atleast_1d(t.detach().cpu().numpy()))
+
+    def save_hp(self, hp):
+        self.h5_.attrs.update({"hp": np.void(pickle.dumps(hp))})
+
+    def load_hp(self):
+        return pickle.loads(self.h5_.attrs['hp'].tobytes())
 
 
 class Image(Array):
