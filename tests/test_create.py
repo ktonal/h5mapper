@@ -11,7 +11,7 @@ def test_load():
     pass
 
 
-@pytest.mark.parametrize("para", ["mp", "future", 'none', "other"])
+@pytest.mark.parametrize("para", ["mp", "threads", 'none', "other"])
 def test_parallelism(tmp_path, para):
     class DB(TypedFile):
         x = RandnArray()

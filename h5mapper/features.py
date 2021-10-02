@@ -1,3 +1,4 @@
+import h5py
 import numpy as np
 import torch
 import librosa
@@ -5,7 +6,7 @@ import imageio
 import dill as pickle
 import os
 import dataclasses as dtc
-from functools import partial
+from functools import partial, cached_property
 from multiprocess import Manager
 import warnings
 
@@ -24,7 +25,8 @@ __all__ = [
     "Sound",
     "VShape",
     "Vocabulary",
-    "DirLabels"
+    "DirLabels",
+    "FilesLabels",
 ]
 
 
@@ -70,7 +72,8 @@ class Feature:
     def __getattr__(self, item):
         if item in self.__dict__:
             return self.__dict__[item]
-        if item in type(self._proxy).__dict__:
+        if item in type(self._proxy).__dict__ or \
+                (self._proxy is not None and item in self._proxy.__dict__):
             return getattr(self._proxy, item)
         else:
             raise AttributeError(f"object of type {self.__class__.__qualname__} has no attribute '{item}'")
@@ -224,6 +227,7 @@ class Vocabulary(Feature):
         self.V = Manager().dict()
 
     def load(self, source):
+        # here `source` is the data loaded by `derived_from`
         if isinstance(source, np.ndarray):
             source = source.flat[:]
         items = {*source}
@@ -233,21 +237,54 @@ class Vocabulary(Feature):
         feat = db.get_proxy(feature_key)
         x = np.array(list(self.V.keys()))
         i = np.array(list(self.V.values()))
-        # source "xi" is the dictionary
-        feat.add("xi", {"x": x, "i": i})
+        # source "data" are the keys and values
+        feat.add("data", {"x": x, "i": i})
         self.V = dict(self.V)
+
+    @cached_property
+    def dict(self):
+        return dict(zip(self.i[:], self.x[:]))
 
 
 class DirLabels(Feature):
 
+    __ds_kwargs__ = dict(labels={}, dirs=dict(dtype=h5py.string_dtype(encoding='utf-8')))
+
     def __init__(self):
-        self.d2i = Manager().dict()
+        self._d2i = Manager().dict()
 
     def load(self, source):
-        direc = os.path.split(source.strip("/"))[0]
-        self.d2i.setdefault(direc, len(self.d2i))
-        return np.array([self.d2i[direc]])
+        direc = os.path.dirname(source)
+        self._d2i.setdefault(direc, len(self._d2i))
+        return {"labels": np.array([self._d2i[direc]]), "dirs": np.array([direc])}
 
-    def after_create(self, db, feature_key):
-        self.d2i = dict(self.d2i)
-        self.i2d = {v: k for k, v in self.d2i.items()}
+    @cached_property
+    def d2i(self):
+        return {k: v for k, v in zip(self.dirs[:], self.labels[:])}
+
+    @cached_property
+    def i2d(self):
+        return {v: k for k, v in zip(self.dirs[:], self.labels[:])}
+
+
+class FilesLabels(Feature):
+    """broadcast labels as source.shape[0] (the data of the feature it is derived from)"""
+
+    def __init__(self, derived_from=""):
+        self.derived_from = derived_from
+        self.count = 0
+
+    def load(self, source):
+        res = np.ones((source.shape[0], ), dtype=np.int) * self.count
+        self.count += 1
+        return res
+
+    @cached_property
+    def f2i(self):
+        db = self._proxy.owner
+        return {k: v for k, v in db.index.items() if self._proxy.refs[v]}
+
+    @cached_property
+    def i2f(self):
+        db = self._proxy.owner
+        return {v: k for k, v in db.index.items() if self._proxy.refs[v]}
