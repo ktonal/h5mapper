@@ -235,3 +235,15 @@ def test_files_labels(tmp_path):
     db = LoadDB(tmp_path / "test1.h5")
     assert db.v.shape[0] == db.x.shape[0], (db.v.shape, db.x.shape)
     assert all(k in sources for k in db.v.f2i.keys()), db.v.f2i
+
+
+def test_rand_string(tmp_path):
+    class DB(TypedFile):
+        s = RandString()
+
+    sources = tuple(map(lambda s: str(s) + '___', range(8)))
+    db = DB.create(tmp_path / "test1.h5", sources,
+                   parallelism="mp")
+
+    assert db.s.asstr
+    assert all(isinstance(s, str) for s in db.s[:])

@@ -1,3 +1,4 @@
+import h5py
 import numpy as np
 import pandas as pd
 import pytest
@@ -41,6 +42,14 @@ class RandnArrayWithT(RandnArray):
     __t__ = (
         lambda arr: arr.flat[:],
     )
+
+
+class RandString(IntVector):
+    __ds_kwargs__ = dict(dtype=h5py.string_dtype(encoding='utf-8'))
+
+    def load(self, source):
+        ints = super(RandString, self).load(source)
+        return np.array(list(map(str, ints)))
 
 
 class DF(FeatWithAttrs):
@@ -98,14 +107,6 @@ class AfterArray(FeatWithAttrs):
 
     def after_create(self, db, feature_key):
         return RandnArray().load(None)
-
-
-class AfterDF(FeatWithAttrs):
-    def load(self, source):
-        return None
-
-    def after_create(self, db, feature_key):
-        return DF().load(None)
 
 
 class AfterDict(FeatWithAttrs):

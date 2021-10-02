@@ -288,3 +288,7 @@ class FilesLabels(Feature):
     def i2f(self):
         db = self._proxy.owner
         return {v: k for k, v in db.index.items() if self._proxy.refs[v]}
+
+
+class String(Feature):
+    __ds_kwargs__ = dict(dtype=h5py.string_dtype(encoding='utf-8'))
