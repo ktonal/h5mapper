@@ -1,8 +1,3 @@
-from .crud import H5_NONE
-import numpy as np
-import h5py
-
-
 __all__ = [
     'depth_first_apply',
     'flatten_dict',

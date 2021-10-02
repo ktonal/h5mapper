@@ -5,6 +5,7 @@ from functools import reduce
 
 __all__ = [
     '_load',
+    'apply_and_store',
     '_add',
     'NP_KEY', "SRC_KEY", "REF_KEY",
     'null_regref'
@@ -73,8 +74,8 @@ def _load(source, schema={}, guard_func=None):
     return out
 
 
-def _map(source, func_dict):
-    return {k: f(source) for k, f in func_dict.items()}
+def apply_and_store(src, fdict, proxy):
+    return src, {k: f(proxy.get(src)) for k, f in fdict.items()}
 
 
 class _add:
@@ -126,33 +127,41 @@ class _add:
             return refs
 
     @staticmethod
-    def id(file, src):
-        _add.array(file, SRC_KEY + "/id", np.array([src]),
-                   ds_kwargs=dict(dtype=h5py.string_dtype(encoding='utf-8')))
-        return file[SRC_KEY + "/id"].shape[0]
+    def id(file, src, is_new_id=True):
+        if SRC_KEY + "/id" not in file or is_new_id:
+            _add.array(file, SRC_KEY + "/id", np.array([src]),
+                       ds_kwargs=dict(dtype=h5py.string_dtype(encoding='utf-8')))
+            return file[SRC_KEY + "/id"].shape[0] - 1
+        return (file[SRC_KEY + "/id"].asstr()[:] == src).nonzero()[0][0]
 
     @staticmethod
-    def refs(file, refs, refed, n_ids):
+    def refs(file, refs, refed, ref_idx):
         # add not yet referenced paths
         for r in (refs.keys() - refed):
-            if n_ids > 1:
+            if ref_idx > 0:
+                n_refs = file[SRC_KEY + "/id"].shape[0]
                 _add.array(file, r + "/" + REF_KEY,
-                           np.array([null_regref] * (n_ids - 1)),
+                           np.array([null_regref] * n_refs),
                            dict(dtype=h5py.regionref_dtype))
             _add.array(file, SRC_KEY + "/ds_keys", np.array([r]),
                        dict(dtype=h5py.string_dtype(encoding='utf-8')))
         # add null ref for refed paths not in refs
         for r in (refed - refs.keys()):
-            refs.setdefault(r, null_regref)
+            if file[r + "/" + REF_KEY].shape[0]-1 < ref_idx:
+                refs.setdefault(r, null_regref)
         # now add the refs
         for path, ref in refs.items():
-            _add.source_ref(file, path, ref)
+            if (path + "/" + REF_KEY) not in file or file[path + "/" + REF_KEY].shape[0]-1 < ref_idx:
+                _add.source_ref(file, path, ref)
+            else:
+                # just update the ref
+                file[path + "/" + REF_KEY][ref_idx] = ref
         return refs
 
     @staticmethod
-    def source(file, src, data, ds_kwargs, refed):
+    def source(file, src, data, ds_kwargs, refed, is_new_src=True):
         refs = _add.data(file, "", data, ds_kwargs)
-        n_ids = _add.id(file, src)
-        refs = _add.refs(file, refs, refed, n_ids)
+        ref_idx = _add.id(file, src, is_new_src)
+        refs = _add.refs(file, refs, refed, ref_idx)
         return refs
 

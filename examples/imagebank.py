@@ -14,7 +14,7 @@ CLI for an Image Bank
 @click.option("-s", "--source", help="where to search for images")
 @click.option("--no-vshape", "-v", is_flag=True, help="whether the source images have different shapes")
 @click.option("--parallelism", '-p', default='mp', help="flavor of parallelism to use."
-                                                        " Must be one of ['mp', 'future', 'none']")
+                                                        " Must be one of ['mp', 'threads', 'none']")
 @click.option("--n-workers", "-w", default=8, help="number of workers to use")
 def main(target, source, no_vshape=False, parallelism='mp', n_workers=8):
     # get all the files under `source` with an image extension

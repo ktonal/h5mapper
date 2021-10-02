@@ -125,6 +125,7 @@ class AsFramedSlice(AsSlice):
     def __post_init__(self):
         if self.as_strided:
             self.length += self.frame_size - 1
+        super(AsFramedSlice, self).__post_init__()
 
     def __call__(self, proxy, item):
         sliced = super(AsFramedSlice, self).__call__(proxy, item)

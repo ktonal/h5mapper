@@ -7,7 +7,7 @@ from typing import Optional
 from functools import reduce
 import tempfile
 
-from .create import _create
+from .create import _create, _compute
 from .features import Feature
 from .serve import ProgrammableDataset
 from .crud import _load, _add, NP_KEY, SRC_KEY, REF_KEY, H5_NONE
@@ -34,12 +34,18 @@ def in_mem(cls):
 
 
 class Proxy:
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
 
     def __getattr__(self, attr):
         if attr in self.__dict__:
             val = self.__dict__[attr]
         # access the feature's methods
-        elif self.feature is not None and getattr(self.feature, attr, False):
+        elif self.__dict__.get("feature", None) is not None and getattr(self.feature, attr, False):
             val = getattr(self.feature, attr)
         else:
             raise AttributeError(f"object of type {self.__class__.__qualname__} has no attribute '{attr}'")
@@ -229,7 +235,8 @@ class Proxy:
     def add(self, source, data):
         h5f = self.handle("r+" if self.owner.mode not in ("w", "r+", "a") else self.owner.mode)
         data_prefixed = flatten_dict(data, prefix=self.group_name.strip("/"))
-        _add.source(h5f, source, data_prefixed, self.feature.__ds_kwargs__, self.owner.ds_keys)
+        _add.source(h5f, source, data_prefixed, self.feature.__ds_kwargs__, self.owner.ds_keys,
+                    source not in self.owner.index)
         self.owner.build_proxies()
         if isinstance(data, dict):
             self._attach_new_children(data)
@@ -251,6 +258,14 @@ class Proxy:
 
     def flush(self):
         return self.owner.flush()
+
+    def compute(self, fdict, n_workers=cpu_count(), parallelism='mp', destination=None):
+        """
+        apply `fdict` to each of self's sources and store the result in `destination`
+        """
+        _compute(fdict, self, parallelism, n_workers,
+                 self.owner if destination is None else destination)
+        return destination
 
 
 class TypedFile:
@@ -351,7 +366,7 @@ class TypedFile:
         h5f = self.handle(mode="r+" if self.mode not in ("w", "r+", "a") else self.mode)
         kwargs = {k: getattr(v, "__ds_kwargs__", {}) for k, v in self.__dict__.items() if isinstance(v, Proxy)}
         data = flatten_dict(data)
-        _add.source(h5f, source, data, kwargs, self.ds_keys)
+        _add.source(h5f, source, data, kwargs, self.ds_keys, source not in self.index)
         self.build_proxies()
         return self
 
@@ -372,7 +387,7 @@ class TypedFile:
             self.f_.flush()
 
     def close(self):
-        if self.f_:
+        if getattr(self, 'f_', None) is not None:
             self.f_.close()
             if self.mode == "w":
                 # reopening a created doesn't overwrite it

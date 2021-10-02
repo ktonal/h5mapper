@@ -2,11 +2,11 @@ import numpy as np
 import torch
 import librosa
 import imageio
-import pickle
+import dill as pickle
 import os
 import dataclasses as dtc
 from functools import partial
-from multiprocessing import Manager
+from multiprocess import Manager
 import warnings
 
 from .utils import depth_first_apply
@@ -70,8 +70,6 @@ class Feature:
     def __getattr__(self, item):
         if item in self.__dict__:
             return self.__dict__[item]
-        if item in self._proxy.__dict__:
-            return self._proxy.__dict__[item]
         if item in type(self._proxy).__dict__:
             return getattr(self._proxy, item)
         else:

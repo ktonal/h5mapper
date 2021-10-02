@@ -1,5 +1,6 @@
 import h5py
-from multiprocessing import cpu_count, Pool
+import numpy as np
+from multiprocess import cpu_count, Pool
 from concurrent.futures import ThreadPoolExecutor
 import os
 from functools import partial
@@ -7,13 +8,43 @@ from functools import partial
 from tqdm import tqdm
 
 from .features import Feature
-from .crud import _add, _load, H5_NONE, SRC_KEY
+from .crud import _add, _load, H5_NONE, SRC_KEY, apply_and_store
 from .utils import flatten_dict
 
 
 __all__ = [
-    "_create"
+    "_create",
+    '_compute',
 ]
+
+
+class SerialExecutor:
+    def map(self, func, iterable):
+        return map(func, iterable)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        return
+
+    def close(self):
+        pass
+
+    def join(self):
+        pass
+
+
+def get_executor(n_workers=cpu_count(), parallelism='mp'):
+    if parallelism == 'mp':
+        executor = Pool(n_workers)
+    elif parallelism == 'threads':
+        executor = ThreadPoolExecutor(n_workers)
+    elif parallelism == 'none':
+        executor = SerialExecutor()
+    else:
+        raise ValueError(f"parallelism must be one of ['mp', 'threads', 'none']. Got '{parallelism}'")
+    return executor
 
 
 def _create(cls,
@@ -44,19 +75,11 @@ def _create(cls,
     # initialize ds_kwargs from schema
     ds_kwargs = {key: getattr(feature, "__ds_kwargs__", {}).copy() for key, feature in schema.items()}
     # get flavour of parallelism
-    if parallelism == 'mp':
-        executor = Pool(n_workers)
-    elif parallelism == 'future':
-        executor = ThreadPoolExecutor(n_workers)
-    elif parallelism == 'none':
-        class Executor:
-            def map(self, func, iterable):
-                return map(func, iterable)
-        executor = Executor()
-    else:
+    try:
+        executor = get_executor(n_workers, parallelism)
+    except ValueError as e:
         f.close()
-        raise ValueError(f"parallelism must be one of ['mp', 'future']. Got '{parallelism}'")
-
+        raise e
     # run loading routine
     n_sources = len(sources)
     batch_size = n_workers * 1
@@ -93,3 +116,26 @@ def _create(cls,
             f.flush()
     # voila!
     return cls(filename, mode if mode != 'w' else "r+", keep_open)
+
+
+def _compute(fdict, proxy, parallelism, n_workers, destination):
+    sources = [src for src in proxy.owner.__src__.id[proxy.refs[:].astype(np.bool)]]
+    executor = get_executor(n_workers, parallelism)
+    n_sources = len(sources)
+    batch_size = n_workers * 1
+    for i in tqdm(range(1 + n_sources // batch_size), leave=False):
+        start_loc = max([i * batch_size, 0])
+        end_loc = min([(i + 1) * batch_size, n_sources])
+        this_sources = sources[start_loc:end_loc]
+        if parallelism in ('mp', 'none'):
+            res = executor.map(partial(apply_and_store, fdict=fdict, proxy=proxy), this_sources)
+        elif parallelism == 'threads':
+            res = executor.map(partial(apply_and_store, fdict=fdict, proxy=proxy), this_sources)
+        else:
+            raise NotImplementedError
+        for src, r in res:
+            destination.add(src, r)
+    if parallelism == 'mp':
+        executor.close()
+        executor.join()
+    return

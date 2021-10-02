@@ -22,7 +22,7 @@ def test_feature_class():
         f = Array()
 
     db = in_mem(DB)
-    print(vars(db.f))
+    # print(vars(db.f))
     db.add("0", {"f": np.random.randn(3, 4, 5)})
     assert isinstance(db.f, Proxy)
     assert getattr(db.f, "feature") is DB.f
@@ -57,12 +57,11 @@ def test_non_loading_feature(tmp_db):
         x = FeatWithAttrs()
 
     sources = tuple(map(str, range(20)))
-    db = DB.create(tmp_db / "test1.h5", sources,
-                   parallelism="mp")
-
-    assert hasattr(db, 'x')
-    assert not any(isinstance(v, Proxy) for v in db.x.__dict__.values())
-    assert db.load("34") == {}
+    with pytest.raises(NotImplementedError):
+        db = DB.create(tmp_db / "test1.h5", sources,
+                       parallelism="mp")
+    # for exiting the context
+    assert True
 
 
 def test_none_feature(tmp_db):
@@ -193,7 +192,7 @@ def test_vocabulary(tmp_path):
     db = DB.create(tmp_path / "test1.h5", sources,
                    parallelism="mp")
 
-    # the dict as is has been discovered
+    # the dict as it has been discovered
     assert isinstance(db.v.V, dict)
     # the arrays for keys and values
     assert isinstance(db.v.get("xi"), dict)
