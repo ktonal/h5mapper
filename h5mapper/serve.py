@@ -154,9 +154,11 @@ class Input:
     transform: Callable[[np.ndarray], np.ndarray] = lambda x: x
 
     def __post_init__(self):
-        self.get_object = lambda file: self.proxy \
-            if self.proxy is not None\
-            else lambda file: getattr(file, self.key)
+        pass
+
+    def get_object(self, file):
+        func = lambda file: getattr(file, self.key)
+        return self.proxy if self.proxy is not None else func
 
     def __len__(self):
         return len(self.getter)

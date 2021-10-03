@@ -2,7 +2,7 @@ h5py>=3.0.0
 numpy>=1.19.0
 librosa>=0.8.0
 imageio>=2.6.0
-torch==1.8.0
+torch>=1.8.0
 tqdm
 multiprocess
 dill

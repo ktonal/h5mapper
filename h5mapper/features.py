@@ -1,9 +1,9 @@
 import h5py
 import numpy as np
-import torch
-import librosa
 import imageio
 import dill as pickle
+import torch
+import librosa
 import os
 import dataclasses as dtc
 from functools import partial, cached_property
@@ -164,6 +164,10 @@ class TensorDict(Feature):
 
     def load_hp(self):
         return pickle.loads(self.h5_.attrs['hp'].tobytes())
+
+    def load_checkpoint(self, module_cls, source):
+        hp = self.load_hp()
+        return module_cls(**hp).load_state_dict(self.get(source))
 
 
 class Image(Array):

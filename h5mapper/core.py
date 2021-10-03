@@ -36,6 +36,8 @@ def in_mem(cls):
 class Proxy:
     def __getstate__(self):
         state = self.__dict__.copy()
+        if 'asstr' in state:
+            state.pop('asstr')
         return state
 
     def __setstate__(self, state):
@@ -267,6 +269,10 @@ class Proxy:
                  self.owner if destination is None else destination)
         return destination
 
+    @property
+    def sources(self):
+        return self.owner.__src__.id[self.refs[:].astype(np.bool)]
+
 
 class TypedFile:
 
@@ -280,6 +286,9 @@ class TypedFile:
         self.f_: Optional[h5py.File] = None
         self.init_schema()
         self.build_proxies()
+        # we reset this after init for being able to pickle this object
+        # in multiprocessing contexts
+        self.f_ = None
 
     def init_schema(self):
         if self.mode == 'r':
@@ -392,6 +401,7 @@ class TypedFile:
             if self.mode == "w":
                 # reopening a created doesn't overwrite it
                 self.mode = 'r+'
+        return
 
     def open(self, mode):
         self.mode = mode
