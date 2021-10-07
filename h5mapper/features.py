@@ -53,8 +53,6 @@ class Feature:
         if obj is None:
             # access from the class object
             return self
-        if self._proxy is not None:
-            return self._proxy
         # when accessed from an instance,
         # user expects a Proxy that should already be
         # in obj's __dict__

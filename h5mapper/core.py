@@ -8,7 +8,7 @@ from functools import reduce
 import tempfile
 
 from .create import _create, _compute
-from .features import Feature
+from .features import Feature, Array
 from .serve import ProgrammableDataset
 from .crud import _load, _add, NP_KEY, SRC_KEY, REF_KEY, H5_NONE
 from .utils import flatten_dict
@@ -46,6 +46,8 @@ class Proxy:
     def __getattr__(self, attr):
         if attr in self.__dict__:
             val = self.__dict__[attr]
+        elif attr in type(self).__dict__:
+            val = type(self).__dict__[attr]
         # access the feature's methods
         elif self.__dict__.get("feature", None) is not None and getattr(self.feature, attr, False):
             val = getattr(self.feature, attr)
@@ -79,10 +81,10 @@ class Proxy:
         """
         attrs = {k: None if not isinstance(v, (np.ndarray, np.void)) and v == H5_NONE else v
                  for k, v in group.attrs.items()}
-        # we "lift up" x/__arr__ or x/__df__ to attributes named "x"
-        if NP_KEY in group.keys():
-            root = Proxy(owner, feature, group.name, NP_KEY, attrs)
-            refs = Proxy(owner, None, group.name, REF_KEY)
+        # we "lift up" all x/__arr__ to attributes named "x"
+        if NP_KEY in group.keys() or isinstance(feature, Array):
+            root = Proxy(owner, feature, group.name, "/" + NP_KEY, attrs)
+            refs = Proxy(owner, None, group.name, "/" + REF_KEY)
             setattr(root, "refs", refs)
         else:
             root = Proxy(owner, feature, group.name, "", attrs)
@@ -112,10 +114,13 @@ class Proxy:
             # copy some of the dataset properties
             was_open = bool(self.owner.f_)
             h5f = self.handle("r")
-            ds = h5f[self.name]
-            self.shape, self.dtype, self.size, self.nbytes = ds.shape, ds.dtype, ds.size, ds.nbytes
-            self.ndim, self.maxshape, self.chunks = ds.ndim, ds.maxshape, ds.chunks
-            self.asstr = h5py.check_string_dtype(ds.dtype)
+            try:
+                ds = h5f[self.name]
+                self.shape, self.dtype, self.size, self.nbytes = ds.shape, ds.dtype, ds.size, ds.nbytes
+                self.ndim, self.maxshape, self.chunks = ds.ndim, ds.maxshape, ds.chunks
+                self.asstr = h5py.check_string_dtype(ds.dtype)
+            except KeyError:  # Dataset hasn't been created yet...
+                pass
             if not was_open:
                 h5f.close()
 
@@ -310,9 +315,14 @@ class TypedFile:
         # build the proxies hierarchy from the top level
         for k in h5f.keys():
             # if a key in a file isn't in this class, attach a base Feature
-            feature = getattr(type(self), k, setattr(self, k, Feature()))
+            feature = getattr(type(self), k, None)
+            if feature is None:
+                feature = Feature()
+                setattr(self, k, feature)
             if isinstance(h5f[k], h5py.Group):
+                before = self.__dict__[k]
                 self.__dict__[k] = Proxy.from_group(self, feature, h5f[k])
+                assert self.__dict__[k] is not before
             else:
                 self.__dict__[k] = Proxy(self, feature, h5f[k].parent.name, k, dict(h5f[k].attrs))
         self.build_refs()

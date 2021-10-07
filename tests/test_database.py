@@ -84,7 +84,7 @@ def test_crud_api(custom_h5):
 
 def test_in_mem():
     db = in_mem(TypedFile)
-    assert bool(db.handle("h5py"))
+    assert bool(db.handle())
     assert not os.path.isfile(db.filename)
     db.add("0", {"ds": np.random.rand(3, 4, 5)})
     assert isinstance(db.get("0")["ds"], np.ndarray)

@@ -2,7 +2,7 @@ import h5py
 import numpy as np
 import pandas as pd
 import pytest
-from h5mapper import Array
+from h5mapper import Array, Feature
 
 
 @pytest.fixture
@@ -12,7 +12,7 @@ def tmp_db(tmp_path):
     return root
 
 
-class FeatWithAttrs(Array):
+class FeatWithAttrs(Feature):
     __re__ = r".*"
 
     param1 = 18
@@ -79,7 +79,7 @@ class DictofDict(FeatWithAttrs):
         )
 
 
-class DerivedArray(FeatWithAttrs):
+class DerivedArray(Array, FeatWithAttrs):
 
     def __init__(self, derived_from="x"):
         self.derived_from = derived_from
@@ -101,7 +101,7 @@ class AfterFeature(FeatWithAttrs):
         return None
 
 
-class AfterArray(FeatWithAttrs):
+class AfterArray(Array, FeatWithAttrs):
     def load(self, source):
         return None
 
@@ -117,13 +117,13 @@ class AfterDict(FeatWithAttrs):
         return {"x": RandnArray().load(None), "y": DF().load(None)}
 
 
-class NoneFeat(Array):
+class NoneFeat(Feature):
 
     def load(self, source):
         return None
 
 
-class BadFeat(Array):
+class BadFeat(Feature):
 
     def load(self, source):
         return "this should raise an Exception"

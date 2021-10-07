@@ -122,8 +122,7 @@ class _add:
             refs = {}
             for k in data.keys():
                 kwargs = reduce(lambda d, x: d.get(x, {}), (path + k).split('/'), ds_kwargs)
-                refs[path + k] = _add.data(file, path + k, data[k],
-                                           kwargs)
+                refs[path + k] = _add.data(file, path + k, data[k], kwargs)
             return refs
 
     @staticmethod

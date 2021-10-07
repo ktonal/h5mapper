@@ -47,6 +47,8 @@ kwargs = {
     'packages': PACKAGES,
     "entry_points": {
         'console_scripts': [
+            'sound-bank=h5mapper.typed_files:sound_bank',
+            'image-bank=h5mapper.typed_files:image_bank'
         ]}
 
 }
