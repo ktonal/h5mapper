@@ -165,7 +165,9 @@ class TensorDict(Feature):
 
     def load_checkpoint(self, module_cls, source):
         hp = self.load_hp()
-        return module_cls(**hp).load_state_dict(self.get(source))
+        net = module_cls(**hp)
+        net.load_state_dict(self.get(source))
+        return net
 
 
 class Image(Array):

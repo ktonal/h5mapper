@@ -274,9 +274,12 @@ class Proxy:
                  self.owner if destination is None else destination)
         return destination
 
+    def serve(self, batch, **loader_kwargs):
+        return self.owner.serve(batch, **loader_kwargs)
+
     @property
     def sources(self):
-        return self.owner.__src__.id[self.refs[:].astype(np.bool)]
+        return getattr(self.owner, SRC_KEY).id[self.refs[:].astype(np.bool)]
 
 
 class TypedFile:

@@ -10,7 +10,7 @@ __all__ = [
 
 @click.command()
 @click.option("-t", "--target", help="file to be created")
-@click.option("-s", "--source", help="where to search for images")
+@click.option("-s", "--source", help="where to search for sound files")
 @click.option("--sr", "-r", default=22050, help="the sample rate used for loading the files")
 @click.option("--mono", "-m", default=True, help="whether to force conversion to mono")
 @click.option("--normalize", "-n", default=True, help="whether each file should be normalized")
@@ -44,6 +44,7 @@ def sound_bank(target, source,
     click.echo(f"stored {N} files in {'%.3f' % dur} seconds")
     # echo
     h5f.info()
+    h5f.close()
     return h5f
 
 
@@ -79,4 +80,5 @@ def image_bank(target, source,
     dur = time() - start
     click.echo(f"stored {N} files in {'%.3f' % dur} seconds")
     h5f.info()
+    h5f.close()
     return h5f

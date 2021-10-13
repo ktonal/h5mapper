@@ -94,7 +94,6 @@ class AfterFeature(FeatWithAttrs):
         return RandnArray().load(source)
 
     def after_create(self, db, feature_key):
-        print(self, feature_key)
         feat = db.get_proxy(feature_key)
         # modify the feature in-place (file should be open for write)
         feat[:] = np.zeros_like(feat[:])

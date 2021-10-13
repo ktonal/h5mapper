@@ -103,18 +103,18 @@ class AsSlice(Getter):
     dim: int = 0
     shift: int = 0
     length: int = 1
-    stride: int = 1
+    downsampling: int = 1
 
     def __post_init__(self):
         self.pre_slices = (slice(None),) * self.dim
 
     def __call__(self, proxy, item):
-        i = item * self.stride
+        i = item * self.downsampling
         slc = slice(i + self.shift, i + self.shift + self.length)
         return proxy[self.pre_slices + (slc, )]
 
     def __len__(self):
-        return (self.n - (self.shift + self.length) + 1) // self.stride
+        return (self.n - (self.shift + self.length) + 1) // self.downsampling
 
 
 @dtc.dataclass
@@ -157,8 +157,7 @@ class Input:
         pass
 
     def get_object(self, file):
-        func = lambda file: getattr(file, self.key)
-        return self.proxy if self.proxy is not None else func
+        return self.proxy if self.proxy is not None else getattr(file, self.key)
 
     def __len__(self):
         return len(self.getter)
