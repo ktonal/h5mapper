@@ -163,8 +163,9 @@ class TensorDict(Feature):
     def load_hp(self):
         return pickle.loads(self.h5_.attrs['hp'].tobytes())
 
-    def load_checkpoint(self, module_cls, source):
+    def load_checkpoint(self, module_cls, source, **overrides):
         hp = self.load_hp()
+        hp.update(overrides)
         net = module_cls(**hp)
         net.load_state_dict(self.get(source))
         return net

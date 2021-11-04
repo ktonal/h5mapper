@@ -1,14 +1,17 @@
 import dataclasses as dtc
-import torch
+
+import librosa
 import numpy as np
+import torch
 from torch.utils.data import Dataset
-from typing import Optional, Callable
+from typing import Optional, Callable, Union
 import re
 from torch._six import string_classes
 import collections
 
 
 __all__ = [
+    'Setter',
     'Getter',
     'AsSlice',
     'AsFramedSlice',
@@ -18,6 +21,22 @@ __all__ = [
     'process_batch',
     'ProgrammableDataset',
 ]
+
+
+@dtc.dataclass
+class Setter:
+
+    dim: int = 0
+    after_item: bool = True
+
+    def __post_init__(self):
+        self.pre_slices = (slice(None),) * self.dim
+
+    def __call__(self, data, item, value):
+        slc = slice(item, item + value.shape[self.dim]) if self.after_item \
+            else slice(item-value.shape[self.dim], item)
+        data.data[self.pre_slices + (slc,)] = value
+        return value.shape[self.dim]
 
 
 @dtc.dataclass
@@ -114,56 +133,70 @@ class AsSlice(Getter):
         return proxy[self.pre_slices + (slc, )]
 
     def __len__(self):
-        return (self.n - (self.shift + self.length) + 1) // self.downsampling
+        return (self.n - (abs(self.shift) + self.length) + 1) // self.downsampling
+
+    def shift_and_length_to_samples(self, frame_length, hop_length, center=False):
+        extra = -hop_length if center else \
+            ((frame_length // hop_length) - 1) * hop_length
+        shift = self.shift * hop_length
+        length = self.length * hop_length + extra
+        return shift, length
 
 
 @dtc.dataclass
 class AsFramedSlice(AsSlice):
+    dim: int = 0
+    shift: int = 0  # in frames!
+    length: int = 1  # in frames!
     frame_size: int = 1
-    as_strided: bool = False
+    hop_length: int = 1
+    center: bool = False
+    pad_mode: str = 'reflect'
+    downsampling: int = 1
 
     def __post_init__(self):
-        if self.as_strided:
-            self.length += self.frame_size - 1
         super(AsFramedSlice, self).__post_init__()
+        # convert frames to samples
+        if self.hop_length != self.frame_size:
+            _, self.length = self.shift_and_length_to_samples(
+                self.frame_size, self.hop_length, self.center)
 
     def __call__(self, proxy, item):
         sliced = super(AsFramedSlice, self).__call__(proxy, item)
-        if self.as_strided:
-            if isinstance(sliced, np.ndarray):
-                as_strided = lambda tensor: torch.as_strided(torch.from_numpy(tensor),
-                                                             size=(self.length-self.frame_size+1, self.frame_size),
-                                                             stride=(1, 1))
-            else:
-                as_strided = lambda tensor: torch.as_strided(tensor,
-                                                             size=(self.length-self.frame_size+1, self.frame_size),
-                                                             stride=(1, 1))
-
-            with torch.no_grad():
-                return as_strided(sliced)
-        else:
-            return sliced.reshape(-1, self.frame_size)
+        if self.center:
+            sliced = np.pad(sliced, int(self.frame_size // 2), self.pad_mode)
+        return librosa.util.frame(sliced, self.frame_size, self.hop_length, axis=0)
 
 
 @dtc.dataclass
 class Input:
     """read and transform data from a specific key/proxy in a .h5 file"""
-    key: str = ''
-    proxy: "Proxy" = None
+    data: Union[str, np.ndarray, "Proxy"] = ''
     getter: Getter = Getter()
+    setter: Optional[Setter] = None
     transform: Callable[[np.ndarray], np.ndarray] = lambda x: x
+    inverse_transform: Callable[[np.ndarray], np.ndarray] = lambda x: x
+    to_tensor: bool = False
+    device: str = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     def __post_init__(self):
         pass
 
     def get_object(self, file):
-        return self.proxy if self.proxy is not None else getattr(file, self.key)
+        return self.data if file is None or not isinstance(self.data, str) \
+            else getattr(file, self.data)
 
     def __len__(self):
         return len(self.getter)
 
-    def __call__(self, file, item):
-        return self.transform(self.getter(self.get_object(file), item))
+    def __call__(self, item, file=None):
+        data = self.getter(self.get_object(file), item)
+        if self.to_tensor:
+            data = torch.from_numpy(data).to(self.device)
+        return self.transform(data)
+
+    def set(self, key, value):
+        return self.setter(self.data, key, value)
 
 
 class Target(Input):
@@ -231,7 +264,7 @@ class ProgrammableDataset(Dataset):
 
     def __getitem__(self, item):
         def get_data(feat):
-            return feat(self.file, item)
+            return feat(item, self.file)
 
         return process_batch(self.batch, _is_batchitem, get_data)
 

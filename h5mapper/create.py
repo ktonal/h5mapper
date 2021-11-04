@@ -63,6 +63,9 @@ def _create(cls,
     if not schema:
         raise ValueError("schema cannot be empty. Either provide one to create()"
                          " or attach Feature attributes to this class.")
+    # avoid blocking errors from h5py
+    if os.path.exists(filename) and mode == 'w':
+        os.remove(filename)
     f = h5py.File(filename, mode, **h5_kwargs)
     f.require_group(SRC_KEY)
     # create groups from schema and write attrs
