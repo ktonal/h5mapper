@@ -6,7 +6,12 @@ import torch
 import librosa
 import os
 import dataclasses as dtc
-from functools import partial, cached_property
+from functools import partial
+try:
+    from functools import cached_property
+except ImportError:  # python<3.8
+    def cached_property(f): return f
+
 from multiprocess import Manager
 import warnings
 
@@ -166,6 +171,8 @@ class TensorDict(Feature):
     def load_checkpoint(self, module_cls, source, **overrides):
         hp = self.load_hp()
         hp.update(overrides)
+        if "cls" in hp:
+            hp.pop("cls")
         net = module_cls(**hp)
         net.load_state_dict(self.get(source))
         return net
