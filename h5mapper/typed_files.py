@@ -3,9 +3,16 @@ import click
 import h5mapper as h5m
 
 __all__ = [
+    'SoundBank',
     'sound_bank',
     'image_bank'
 ]
+
+
+class SoundBank(h5m.TypedFile):
+    snd: h5m.Sound = None
+    file_labels: h5m.FilesLabels = None
+    dir_labels: h5m.DirLabels = None
 
 
 @click.command()
@@ -27,19 +34,20 @@ def sound_bank(target, source,
                dir_labels=False,
                parallelism='mp',
                n_workers=8):
+    source = [source] if isinstance(source, str) else source
     # get all the files under `source` with an image extension
-    files = list(h5m.FileWalker(h5m.Sound.__re__, [source]))
+    files = list(h5m.FileWalker(h5m.Sound.__re__, source))
     N = len(files)
     click.echo(f"consolidating {N} files into '{target}'...")
     start = time()
-    # dynamically create a TypedFile
-    ftp = h5m.typedfile('SoundBank', dict(
-        snd=h5m.Sound(sr=sr, mono=mono, normalize=normalize),
-        **({"file_labels": h5m.FilesLabels(derived_from='snd')} if file_labels else {}),
-        **({"dir_labels": h5m.DirLabels()} if dir_labels else {}),
-    ))
+    # dynamically create the TypedFile
+    SoundBank.snd = h5m.Sound(sr=sr, mono=mono, normalize=normalize)
+    if file_labels:
+        SoundBank.file_labels = h5m.FilesLabels(derived_from='snd')
+    if dir_labels:
+        SoundBank.dir_labels = h5m.DirLabels()
     # parallel job
-    h5f = ftp.create(target, files, parallelism=parallelism, n_workers=n_workers)
+    h5f = SoundBank.create(target, files, parallelism=parallelism, n_workers=n_workers)
     dur = time() - start
     click.echo(f"stored {N} files in {'%.3f' % dur} seconds")
     # echo
