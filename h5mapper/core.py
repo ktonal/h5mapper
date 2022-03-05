@@ -13,7 +13,6 @@ from .serve import ProgrammableDataset
 from .crud import _load, _add, NP_KEY, SRC_KEY, REF_KEY, H5_NONE
 from .utils import flatten_dict
 
-
 __all__ = [
     'as_temp',
     'in_mem',
@@ -348,15 +347,11 @@ class TypedFile:
                keep_open=False,
                **h5_kwargs
                ):
-        return _create(cls,
-                       filename,
-                       sources,
-                       mode,
-                       schema,
-                       n_workers,
-                       parallelism,
-                       keep_open,
-                       **h5_kwargs)
+        _create(cls, filename, sources, mode, schema,
+                n_workers, parallelism, keep_open,
+                **h5_kwargs
+                )
+        return cls(filename, mode if mode != 'w' else "r+", keep_open, **h5_kwargs)
 
     def handle(self, mode=None):
         """
@@ -458,6 +453,4 @@ class TypedFile:
 def typedfile(name, schema):
     return type(name, (TypedFile,), schema)
 
-
 # TODO : SingleID object ~ TypedFile with only one ref (copy? mask? link?...) for concatenating datasets
-

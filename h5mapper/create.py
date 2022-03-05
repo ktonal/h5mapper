@@ -117,8 +117,10 @@ def _create(cls,
         if getattr(type(feature), "after_create", Feature.after_create) != Feature.after_create:
             feature.after_create(db, key)
             f.flush()
+    db.close()
     # voila!
-    return cls(filename, mode if mode != 'w' else "r+", keep_open)
+    f.close()
+    return
 
 
 def _compute(fdict, proxy, parallelism, n_workers, destination):

@@ -1,6 +1,7 @@
-__version__ = '0.1.0'
+__version__ = '0.2.1'
 
 from .core import *
+from .create import *
 from .crud import *
 from .features import *
 from .file_walker import *
