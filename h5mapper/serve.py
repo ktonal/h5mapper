@@ -165,7 +165,7 @@ class AsFramedSlice(AsSlice):
         sliced = super(AsFramedSlice, self).__call__(proxy, item)
         if self.center:
             sliced = np.pad(sliced, int(self.frame_size // 2), self.pad_mode)
-        return librosa.util.frame(sliced, self.frame_size, self.hop_length, axis=0)
+        return librosa.util.frame(sliced, frame_length=self.frame_size, hop_length=self.hop_length, axis=0)
 
 
 @dtc.dataclass
