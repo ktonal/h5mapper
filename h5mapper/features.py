@@ -204,7 +204,7 @@ class Sound(Array):
         return dtc.asdict(self)
 
     def load(self, source):
-        y = librosa.load(source, self.sr, self.mono)[0]
+        y = librosa.load(source, sr=self.sr, mono=self.mono)[0]
         if self.normalize:
             y = librosa.util.normalize(y, )
         return y
