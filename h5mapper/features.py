@@ -193,7 +193,7 @@ class Image(Array):
 
 @dtc.dataclass
 class Sound(Array):
-    __re__ = r"wav$|aif$|aiff$|mp3$|mp4$|m4a$"
+    __re__ = r"wav$|aif$|aiff$|mp3$|mp4$|m4a$|webm$"
 
     sr: int = 22050
     mono: bool = True
@@ -204,7 +204,7 @@ class Sound(Array):
         return dtc.asdict(self)
 
     def load(self, source):
-        y = librosa.load(source, sr=self.sr, mono=self.mono)[0]
+        y = librosa.load(source, sr=self.sr, mono=self.mono, res_type='soxr_vhq')[0]
         if self.normalize:
             y = librosa.util.normalize(y, )
         return y
