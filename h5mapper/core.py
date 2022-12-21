@@ -379,6 +379,10 @@ class TypedFile:
             proxy = Proxy.from_group(self, feature, handle[new])
             self.__dict__[new] = proxy
 
+    @property
+    def attrs(self):
+        return self.handle().attrs
+
     def add(self, source, data):
         h5f = self.handle(mode="r+" if self.mode not in ("w", "r+", "a") else self.mode)
         kwargs = {k: getattr(v, "__ds_kwargs__", {}) for k, v in self.__dict__.items() if isinstance(v, Proxy)}

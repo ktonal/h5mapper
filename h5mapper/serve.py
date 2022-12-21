@@ -41,36 +41,12 @@ class Setter:
 
 @dtc.dataclass
 class Getter:
-    """
-    base class for implementing data getter
 
-    Parameters
-    ----------
-
-    Attributes
-    ----------
-    n : int or None
-        the length of the underlying data
-    """
     n: Optional[int] = dtc.field(default=None, init=False)
 
     def __call__(self, proxy, item):
-        """
-        apply this instance's logic to get data from ``proxy`` for a given ``item``
-
-        Parameters
-        ----------
-        proxy: h5m.Proxy
-            the proxy to read from
-        item: int
-            the index emitted from a sampler
-
-        Returns
-        -------
-        data: Any
-            the data corresponding to this item
-        """
-        return proxy[item]
+        X = proxy[item]
+        return X.copy() if isinstance(X, np.ndarray) else X
 
     def __len__(self):
         return self.n
@@ -79,46 +55,13 @@ class Getter:
 class GetId(Getter):
 
     def __call__(self, proxy, item):
-        return proxy[proxy.refs[item]]
+        X = proxy[proxy.refs[item]]
+        return X.copy() if isinstance(X, np.ndarray) else X
 
 
 @dtc.dataclass
 class AsSlice(Getter):
-    """
-    maps an ``item`` to a slice of data
 
-    Parameters
-    ----------
-    dim : int
-        the dimension to slice
-    shift : int
-        the slice will start at the index `item + shift`
-    length : int
-        the length of the slice
-    stride : int
-        sub-sampling factor. Every `stride` datapoints `item` increases of `1`
-
-    Examples
-    --------
-
-    .. testcode::
-
-       import h5mapper as h5m
-
-       slicer = h5m.AsSlice(shift=2, length=3)
-       data, item = list(range(10)), 2
-
-       # now use it like a function :
-       sliced = slicer(data, item)
-
-       print(sliced)
-
-    will output:
-
-    .. testoutput::
-
-       [4, 5, 6]
-    """
     dim: int = 0
     shift: int = 0
     length: int = 1
@@ -130,7 +73,10 @@ class AsSlice(Getter):
     def __call__(self, proxy, item):
         i = item * self.downsampling
         slc = slice(i + self.shift, i + self.shift + self.length)
-        return proxy[self.pre_slices + (slc, )]
+        # !important!: .copy() prevent memory leaks in torch's Dataloader
+        # see https://github.com/h5py/h5py/issues/2010
+        X = proxy[self.pre_slices + (slc, )]
+        return X.copy() if isinstance(X, np.ndarray) else X
 
     def __len__(self):
         return (self.n - (abs(self.shift) + self.length) + 1) // self.downsampling
@@ -165,7 +111,10 @@ class AsFramedSlice(AsSlice):
         sliced = super(AsFramedSlice, self).__call__(proxy, item)
         if self.center:
             sliced = np.pad(sliced, int(self.frame_size // 2), self.pad_mode)
-        return librosa.util.frame(sliced, frame_length=self.frame_size, hop_length=self.hop_length, axis=0)
+        if isinstance(sliced, np.ndarray):
+            return librosa.util.frame(sliced, frame_length=self.frame_size, hop_length=self.hop_length, axis=0)
+        else:
+            return sliced.unfold(0, self.frame_size, self.hop_length)
 
 
 @dtc.dataclass
@@ -174,10 +123,8 @@ class Input:
     data: Union[str, np.ndarray, "Proxy"] = ''
     getter: Getter = Getter()
     setter: Optional[Setter] = None
-    transform: Callable[[np.ndarray], np.ndarray] = lambda x: x
-    inverse_transform: Callable[[np.ndarray], np.ndarray] = lambda x: x
+    transform: Optional[Callable[[np.ndarray], np.ndarray]] = None
     to_tensor: bool = False
-    device: str = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     def __post_init__(self):
         pass
@@ -192,16 +139,22 @@ class Input:
     def __call__(self, item, file=None):
         data = self.getter(self.get_object(file), item)
         if self.to_tensor:
-            data = torch.from_numpy(data).to(self.device)
-        return self.transform(data)
+            data = torch.from_numpy(data)
+        return self.transform(data) if self.transform is not None else data
 
     def set(self, key, value):
         return self.setter(self.data, key, value)
 
 
-class Target(Input):
-    """exactly equivalent to Input, just makes code simpler to read."""
-    pass
+@dtc.dataclass
+class Target:
+    data: Union[str, np.ndarray, "Proxy"] = ''
+    setter: Setter = Setter()
+    transform: Optional[Callable[[np.ndarray], np.ndarray]] = None
+
+    def __call__(self, item, value, file=None):
+        value = self.transform(value) if self.transform is not None else value
+        return self.setter(self.data, item, value)
 
 
 np_str_obj_array_pattern = re.compile(r'[SaUO]')
@@ -266,7 +219,7 @@ class ProgrammableDataset(Dataset):
         def get_data(feat):
             return feat(item, self.file)
 
-        return process_batch(self.batch, _is_batchitem, get_data)
+        return process_batch(tuple(self.batch), _is_batchitem, get_data)
 
     def __len__(self):
         return self.N

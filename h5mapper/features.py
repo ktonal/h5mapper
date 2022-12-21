@@ -147,9 +147,7 @@ class TensorDict(Feature):
     )
 
     def __init__(self, state_dict={}):
-        self.__ds_kwargs__ = {k: dict(compression="lzf",
-                                      chunks=tuple(state_dict[k].shape))
-                              for k in state_dict.keys()}
+        self.set_ds_kwargs(state_dict)
 
     @property
     def attrs(self):
@@ -176,6 +174,12 @@ class TensorDict(Feature):
         net = module_cls(**hp)
         net.load_state_dict(self.get(source))
         return net
+
+    def set_ds_kwargs(self, state_dict):
+        self.__ds_kwargs__ = {k: dict(compression="lzf",
+                                      chunks=tuple(state_dict[k].shape))
+                              for k in state_dict.keys()}
+        return self
 
 
 class Image(Array):
