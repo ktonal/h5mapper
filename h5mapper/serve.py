@@ -120,7 +120,7 @@ class AsFramedSlice(AsSlice):
 @dtc.dataclass
 class Input:
     """read and transform data from a specific key/proxy in a .h5 file"""
-    data: Union[str, np.ndarray, "Proxy"] = ''
+    data: Union[str, np.ndarray, "Proxy"] = None
     getter: Getter = Getter()
     setter: Optional[Setter] = None
     transform: Optional[Callable[[np.ndarray], np.ndarray]] = None
@@ -137,7 +137,7 @@ class Input:
         return len(self.getter)
 
     def __call__(self, item, file=None):
-        data = self.getter(self.get_object(file), item)
+        data = self.getter(self.data, item)
         if self.to_tensor:
             data = torch.from_numpy(data)
         return self.transform(data) if self.transform is not None else data
@@ -193,32 +193,26 @@ class ProgrammableDataset(Dataset):
     def __init__(self, file, batch=tuple()):
         super(Dataset, self).__init__()
         self.file = file
-
-        def cache_lengths(feat):
-            # pass the lengths of the db features to the getters
-            if feat.getter.n is None:
-                if isinstance(feat.getter, GetId):
-                    n = sum(feat.get_object(file).refs[()].astype(np.bool))
-                else:
-                    n = len(feat.get_object(file))
-                setattr(feat.getter, 'n', n)
-            return feat
-
-        self.batch = process_batch(batch, _is_batchitem, cache_lengths)
-
-        # get the minimum length of all batchitems
         self.N = float('inf')
 
-        def set_n_to_min(feat):
-            self.N = min(len(feat), self.N)
-            return feat
+        def initialize_items(item: Union[Input, Target]):
+            if isinstance(item.data, str) and self.file is not None:
+                item.data = getattr(self.file, item.data)
+            if item.getter.n is None:
+                if isinstance(item.getter, GetId):
+                    # will raise if feat is not a proxy...
+                    n = sum(item.data.refs[()].astype(bool))
+                else:
+                    n = len(item.data)
+                setattr(item.getter, 'n', n)
+            self.N = min(len(item), self.N)
+            return item
 
-        process_batch(self.batch, _is_batchitem, set_n_to_min)
+        self.batch = process_batch(batch, _is_batchitem, initialize_items)
 
     def __getitem__(self, item):
         def get_data(feat):
-            return feat(item, self.file)
-
+            return feat(item)
         return process_batch(tuple(self.batch), _is_batchitem, get_data)
 
     def __len__(self):

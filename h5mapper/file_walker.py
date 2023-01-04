@@ -9,7 +9,7 @@ __all__ = [
 
 class FileWalker:
 
-    def __init__(self, regex, sources=None):
+    def __init__(self, regex, sources=None, abspath=True):
         """
         recursively find files from `sources` whose paths match the pattern passed in `regex`
 
@@ -29,6 +29,7 @@ class FileWalker:
         """
         self._regex = re.compile(regex)
         self.sources = sources
+        self.abspath = abspath
 
     def __iter__(self):
         generators = []
@@ -60,7 +61,7 @@ class FileWalker:
         for directory, _, files in os.walk(root):
             for file in filter(self.is_matching_file,
                                (os.path.join(directory, f) for f in files)):
-                yield file
+                yield file if not self.abspath else os.path.abspath(file)
 
     def is_matching_file(self, filename):
         # filter out any hidden files

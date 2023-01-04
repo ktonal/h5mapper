@@ -46,6 +46,7 @@ class Feature:
     __grp_t__ = ()
 
     _proxy = None
+    lock = None
 
     @property
     def attrs(self):
@@ -291,7 +292,7 @@ class FilesLabels(Feature):
         self.count = 0
 
     def load(self, source):
-        res = np.ones((source.shape[0], ), dtype=np.int) * self.count
+        res = np.ones((source.shape[0], ), dtype=int) * self.count
         self.count += 1
         return res
 
