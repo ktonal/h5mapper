@@ -8,7 +8,7 @@ from functools import partial
 from tqdm import tqdm
 
 from .features import Feature
-from .crud import _add, _load, H5_NONE, SRC_KEY, apply_and_store
+from .crud import _add, _load, SRC_KEY, apply_and_store
 from .utils import flatten_dict
 
 
@@ -68,11 +68,10 @@ def _create(cls,
         os.remove(filename)
     f = h5py.File(filename, mode, **h5_kwargs)
     f.require_group(SRC_KEY)
-    # create groups from schema and write attrs
-    groups = {key: f.create_group(key) if key not in f else f[key] for key in schema.keys()}
-    for key, grp in groups.items():
-        for k, v in schema[key].attrs.items():
-            grp.attrs[k] = v if v is not None else H5_NONE
+    # create groups from schema
+    for key in schema:
+        if key not in f:
+            f.create_group(key)
     f.flush()
 
     # initialize ds_kwargs from schema
@@ -112,11 +111,14 @@ def _create(cls,
         executor.close()
         executor.join()
     # run after_create
-    db = cls(filename, mode="r+", keep_open=False)
+    db = cls(filename, mode="r+", keep_open=True)
     for key, feature in schema.items():
         if getattr(type(feature), "after_create", Feature.after_create) != Feature.after_create:
             feature.after_create(db, key)
             f.flush()
+    if hasattr(cls, "after_create"):
+        db.after_create()
+        f.flush()
     db.close()
     # voila!
     f.close()

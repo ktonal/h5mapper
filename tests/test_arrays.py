@@ -26,8 +26,6 @@ def check_handler(feat, keep_open):
 def test_proxy_attributes(array_db):
     feat = array_db.x
 
-    assert feat.attrs == FeatWithAttrs().attrs
-
     assert feat.owner is array_db
     assert not feat.is_group
     assert hasattr(feat, "shape") and isinstance(feat.shape, tuple)

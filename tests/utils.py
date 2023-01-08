@@ -19,10 +19,6 @@ class FeatWithAttrs(Feature):
     param2 = "hey"
     param3 = None
 
-    @property
-    def attrs(self):
-        return dict(param1=self.param1, param2=self.param2, param3=self.param3)
-
     def custom_method(self, inputs):
         return np.zeros_like(inputs)
 

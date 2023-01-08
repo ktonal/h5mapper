@@ -78,7 +78,7 @@ class Proxy:
         proxy : Proxy
             a proxy to `group` with the children attached as attributes
         """
-        attrs = {k: None if not isinstance(v, (np.ndarray, np.void)) and v == H5_NONE else v
+        attrs = {k: None if not isinstance(v, (np.ndarray, np.void, int, float, str)) and v == H5_NONE else v
                  for k, v in group.attrs.items()}
         # we "lift up" all x/__arr__ to attributes named "x"
         if NP_KEY in group.keys() or isinstance(feature, Array):
@@ -107,7 +107,7 @@ class Proxy:
         self.group_name = group_name
         self.owner: TypedFile = owner
         self.feature = feature
-        self.attrs = attrs
+        self._attrs = attrs
         self.is_group = not bool(key)
         if not self.is_group:
             # copy some of the dataset properties
@@ -122,6 +122,10 @@ class Proxy:
                 pass
             if not was_open:
                 h5f.close()
+
+    @property
+    def attrs(self):
+        return self.handle()[self.group_name].attrs
 
     def handle(self, mode=None):
         """

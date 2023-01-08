@@ -48,10 +48,6 @@ class Feature:
     _proxy = None
     lock = None
 
-    @property
-    def attrs(self):
-        return {}
-
     def __set_name__(self, owner, name):
         self.name = name
 
@@ -123,12 +119,6 @@ class Group(Feature):
             setattr(self, k, v)
         self.features = features
 
-    @property
-    def attrs(self):
-        """concatenate all the features attrs in one dict"""
-        return dict(list(item for f in self.features.values()
-                         for item in f.attrs.items()))
-
     def load(self, source):
         return _load(source, self.features, guard_func=Feature.load)
 
@@ -150,31 +140,12 @@ class TensorDict(Feature):
     def __init__(self, state_dict={}):
         self.set_ds_kwargs(state_dict)
 
-    @property
-    def attrs(self):
-        return {}
-
     def load(self, source):
         return self.format(torch.load(source))
 
     @staticmethod
     def format(state_dict):
         return depth_first_apply(state_dict, lambda t: np.atleast_1d(t.detach().cpu().numpy()))
-
-    def save_hp(self, hp):
-        self.h5_.attrs.update({"hp": np.void(pickle.dumps(hp))})
-
-    def load_hp(self):
-        return pickle.loads(self.h5_.attrs['hp'].tobytes())
-
-    def load_checkpoint(self, module_cls, source, **overrides):
-        hp = self.load_hp()
-        hp.update(overrides)
-        if "cls" in hp:
-            hp.pop("cls")
-        net = module_cls(**hp)
-        net.load_state_dict(self.get(source))
-        return net
 
     def set_ds_kwargs(self, state_dict):
         self.__ds_kwargs__ = {k: dict(compression="lzf",
@@ -186,10 +157,6 @@ class TensorDict(Feature):
 class Image(Array):
     __re__ = r"png$|jpeg$"
     __ds_kwargs__ = dict()
-
-    @property
-    def attrs(self):
-        return {}
 
     def load(self, source):
         img = imageio.imread(source)
@@ -203,10 +170,6 @@ class Sound(Array):
     sr: int = 22050
     mono: bool = True
     normalize: bool = True
-
-    @property
-    def attrs(self):
-        return dtc.asdict(self)
 
     def load(self, source):
         y = librosa.load(source, sr=self.sr, mono=self.mono, res_type='soxr_vhq')[0]
@@ -227,10 +190,6 @@ class VShape(Feature):
         setattr(self, "__ds_kwargs__", base_feat.__ds_kwargs__)
         # chain the base's transform after our
         setattr(self, "__grp_t__", (*self.__grp_t__, *base_feat.__grp_t__))
-
-    @property
-    def attrs(self):
-        return self.base_feat.attrs
 
     def load(self, source):
         arr = self.base_feat.load(source)

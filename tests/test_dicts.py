@@ -26,8 +26,6 @@ def check_handler(feat, keep_open):
 def test_proxy_attributes(dict_db):
     feat = dict_db.d
 
-    assert feat.attrs == FeatWithAttrs().attrs
-
     assert feat.owner is dict_db
     assert feat.is_group
 
@@ -135,8 +133,6 @@ def dict_of_dict_db(tmp_db):
 
 def test_dictofdict_attributes(dict_of_dict_db):
     feat = dict_of_dict_db.d
-
-    assert feat.attrs == FeatWithAttrs().attrs
 
     assert feat.owner is dict_of_dict_db
     assert feat.is_group
