@@ -1,6 +1,6 @@
 import os
 import re
-from typing import Iterable
+from typing import Iterable, Union
 
 __all__ = [
     "FileWalker"
@@ -9,7 +9,8 @@ __all__ = [
 
 class FileWalker:
 
-    def __init__(self, regex, sources=None, abspath=True):
+    def __init__(self, regex: Union[str, re.Pattern],
+                 sources=None, abspath=True):
         """
         recursively find files from `sources` whose paths match the pattern passed in `regex`
 
@@ -27,7 +28,7 @@ class FileWalker:
         >>> files = list(FileWalker(regex=r'.*mid$', sources=["my-root-dir", 'piece.mid']))
 
         """
-        self._regex = re.compile(regex)
+        self._regex = re.compile(regex) if not isinstance(regex, re.Pattern) else regex
         self.sources = sources
         self.abspath = abspath
 

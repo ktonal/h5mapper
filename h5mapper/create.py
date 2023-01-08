@@ -4,12 +4,18 @@ from multiprocess import cpu_count, Pool
 from concurrent.futures import ThreadPoolExecutor
 import os
 from functools import partial
-
-from tqdm import tqdm
+from IPython import get_ipython
 
 from .features import Feature
 from .crud import _add, _load, SRC_KEY, apply_and_store
 from .utils import flatten_dict
+
+shell = get_ipython().__class__.__name__
+if shell in ('ZMQInteractiveShell', "Shell"):
+    # local and colab notebooks
+    from tqdm.notebook import tqdm
+else:
+    from tqdm import tqdm
 
 
 __all__ = [
@@ -86,7 +92,8 @@ def _create(cls,
     n_sources = len(sources)
     batch_size = n_workers * 1
     refed_paths = set()
-    for i in tqdm(range(1 + n_sources // batch_size), leave=False):
+    for i in tqdm(range(1 + n_sources // batch_size),
+                  leave=True, desc="Extracting Files", unit="batch"):
         start_loc = max([i * batch_size, 0])
         end_loc = min([(i + 1) * batch_size, n_sources])
         this_sources = sources[start_loc:end_loc]

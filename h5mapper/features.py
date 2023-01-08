@@ -1,18 +1,12 @@
 import h5py
 import numpy as np
-import imageio
-import dill as pickle
 import torch
-import librosa
-import os
-import dataclasses as dtc
 from functools import partial
 try:
     from functools import cached_property
 except ImportError:  # python<3.8
     def cached_property(f): return f
 
-from multiprocess import Manager
 import warnings
 
 from .utils import depth_first_apply
@@ -26,12 +20,7 @@ __all__ = [
     'Array',
     'Group',
     "TensorDict",
-    "Image",
-    "Sound",
     "VShape",
-    "Vocabulary",
-    "DirLabels",
-    "FilesLabels",
 ]
 
 
@@ -154,30 +143,6 @@ class TensorDict(Feature):
         return self
 
 
-class Image(Array):
-    __re__ = r"png$|jpeg$"
-    __ds_kwargs__ = dict()
-
-    def load(self, source):
-        img = imageio.imread(source)
-        return img
-
-
-@dtc.dataclass
-class Sound(Array):
-    __re__ = r"wav$|aif$|aiff$|mp3$|mp4$|m4a$|webm$"
-
-    sr: int = 22050
-    mono: bool = True
-    normalize: bool = True
-
-    def load(self, source):
-        y = librosa.load(source, sr=self.sr, mono=self.mono, res_type='soxr_vhq')[0]
-        if self.normalize:
-            y = librosa.util.normalize(y, )
-        return y
-
-
 class VShape(Feature):
     __grp_t__ = (
         lambda d: d["arr"].reshape(*d["shape_"]),
@@ -194,76 +159,6 @@ class VShape(Feature):
     def load(self, source):
         arr = self.base_feat.load(source)
         return {"arr": arr.reshape(-1), "shape_": np.array(arr.shape)}
-
-
-class Vocabulary(Feature):
-
-    def __init__(self, derived_from):
-        self.derived_from = derived_from
-        self.V = Manager().dict()
-
-    def load(self, source):
-        # here `source` is the data loaded by `derived_from`
-        if isinstance(source, np.ndarray):
-            source = source.flat[:]
-        items = {*source}
-        self.V.update({x: i for x, i in zip(items, range(len(self.V), len(items)))})
-
-    def after_create(self, db, feature_key):
-        feat = db.get_proxy(feature_key)
-        x = np.array(list(self.V.keys()))
-        i = np.array(list(self.V.values()))
-        # source "data" are the keys and values
-        feat.add("data", {"x": x, "i": i})
-        self.V = dict(self.V)
-
-    @cached_property
-    def dict(self):
-        return dict(zip(self.i[:], self.x[:]))
-
-
-class DirLabels(Feature):
-
-    __ds_kwargs__ = dict(labels={}, dirs=dict(dtype=h5py.string_dtype(encoding='utf-8')))
-
-    def __init__(self):
-        self._d2i = Manager().dict()
-
-    def load(self, source):
-        direc = os.path.dirname(source)
-        self._d2i.setdefault(direc, len(self._d2i))
-        return {"labels": np.array([self._d2i[direc]]), "dirs": np.array([direc])}
-
-    @cached_property
-    def d2i(self):
-        return {k: v for k, v in zip(self.dirs[:], self.labels[:])}
-
-    @cached_property
-    def i2d(self):
-        return {v: k for k, v in zip(self.dirs[:], self.labels[:])}
-
-
-class FilesLabels(Feature):
-    """broadcast labels as source.shape[0] (the data of the feature it is derived from)"""
-
-    def __init__(self, derived_from=""):
-        self.derived_from = derived_from
-        self.count = 0
-
-    def load(self, source):
-        res = np.ones((source.shape[0], ), dtype=int) * self.count
-        self.count += 1
-        return res
-
-    @cached_property
-    def f2i(self):
-        db = self._proxy.owner
-        return {k: v for k, v in db.index.items() if self._proxy.refs[v]}
-
-    @cached_property
-    def i2f(self):
-        db = self._proxy.owner
-        return {v: k for k, v in db.index.items() if self._proxy.refs[v]}
 
 
 class String(Feature):

@@ -179,64 +179,6 @@ def test_array_transform(tmp_path):
     assert got["x"].shape == RandnArray().load(None).flat[:].shape
 
 
-def test_vocabulary(tmp_path):
-    class DB(TypedFile):
-        x = IntVector()
-        v = Vocabulary(derived_from="x")
-
-    sources = tuple(map(lambda s: str(s) + '___', range(8)))
-
-    before = DB.v.V.copy()
-    DB.v.load(DB.x.load("none"))
-    assert before != DB.v.V
-
-    db = DB.create(tmp_path / "test1.h5", sources,
-                   parallelism="mp")
-
-    # the dict as it has been loaded
-    assert isinstance(db.v.V, dict)
-    # the arrays for keys and values
-    assert isinstance(db.v.get("data"), dict)
-    assert isinstance(db.v.i, Proxy)
-    assert isinstance(db.v.x, Proxy)
-    # the dict property
-    assert isinstance(db.v.dict, dict)
-    assert all(i in db.v.dict for i in db.v.i[:])
-
-
-def test_dir_labels(tmp_path):
-    class DB(TypedFile):
-        x = IntVector()
-        v = DirLabels()
-
-    class LoadDB(TypedFile):
-        x = IntVector()
-        v = DirLabels()
-
-    sources = tuple(map(lambda s: str(s) + '___/', range(8)))
-    DB.create(tmp_path / "test1.h5", sources,
-              parallelism="mp")
-    db = LoadDB(tmp_path / "test1.h5")
-    assert all(k + "/" in sources for k in db.v.d2i.keys()), db.v.d2i
-
-
-def test_files_labels(tmp_path):
-    class DB(TypedFile):
-        x = IntVector()
-        v = FilesLabels(derived_from='x')
-
-    class LoadDB(TypedFile):
-        x = IntVector()
-        v = FilesLabels(derived_from='x')
-
-    sources = tuple(map(lambda s: str(s) + '___', range(8)))
-    DB.create(tmp_path / "test1.h5", sources,
-              parallelism="mp")
-    db = LoadDB(tmp_path / "test1.h5")
-    assert db.v.shape[0] == db.x.shape[0], (db.v.shape, db.x.shape)
-    assert all(k in sources for k in db.v.f2i.keys()), db.v.f2i
-
-
 def test_rand_string(tmp_path):
     class DB(TypedFile):
         s = RandString()

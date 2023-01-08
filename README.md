@@ -76,8 +76,9 @@ import h5mapper as h5m
 class Experiment(h5m.TypedFile):
 
     data = h5m.Group(
-            images=h5m.Image(),
-            labels=h5m.DirLabels()
+            # your custom h5m.Feature classes:
+            images=Image(),
+            labels=DirLabels()
             )
     logs = h5m.Group(
             loss=h5m.Array()
@@ -126,7 +127,7 @@ Which works because `exp.data.images` is a `Dataset` and only `Datasets` have `r
 >> exp.data.labels[:32]
 Out: np.array([0, 0, ....])
 ```
-Which also only works for `Datasets`.
+Which only works for `Dataset`s - not for `Group`s.
 
 > Note that, in this last case, you are indexing into the **concatenation of all sub-arrays along their first axis**.
 
@@ -203,7 +204,6 @@ Primarly designed with `pytorch` users in mind, `h5m` plays very nicely with the
 class MyDS(h5m.TypedFile, torch.utils.data.Dataset):
     
     x = MyInputFeature(42)
-    labels = h5m.DirLabels()
     
     def __getitem__(self, item):
         return self.x[item], self.labels[item]
@@ -238,7 +238,6 @@ loader = f.serve(
 
 in ``h5mapper/examples`` you'll find for now
 - a train script with data, checkpoints and logs in `dataset_and_logs.py`
-- two click command-lines for making image- and soundbanks
 - a script for benchmarking batch-loading times of different options
 
 ### Development
