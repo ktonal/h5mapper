@@ -60,7 +60,6 @@ def _create(cls,
             schema={},
             n_workers=cpu_count(),
             parallelism='mp',
-            keep_open=False,
             **h5_kwargs
             ):
     if not schema:
@@ -133,7 +132,7 @@ def _create(cls,
 
 
 def _compute(fdict, proxy, parallelism, n_workers, destination):
-    sources = [src for src in proxy.owner.__src__.id[proxy.refs[:].astype(np.bool)]]
+    sources = [src for src in proxy.owner.__src__.id[proxy.refs[:].astype(bool)]]
     executor = get_executor(n_workers, parallelism)
     n_sources = len(sources)
     batch_size = n_workers * 1

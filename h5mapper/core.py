@@ -282,7 +282,7 @@ class Proxy:
 
     @property
     def sources(self):
-        return getattr(self.owner, SRC_KEY).id[self.refs[:].astype(np.bool)]
+        return getattr(self.owner, SRC_KEY).id[self.refs[:].astype(bool)]
 
 
 class TypedFile:
@@ -352,7 +352,7 @@ class TypedFile:
                **h5_kwargs
                ):
         _create(cls, filename, sources, mode, schema,
-                n_workers, parallelism, keep_open,
+                n_workers, parallelism,
                 **h5_kwargs
                 )
         return cls(filename, mode if mode != 'w' else "r+", keep_open, **h5_kwargs)
