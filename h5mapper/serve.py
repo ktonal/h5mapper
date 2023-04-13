@@ -6,7 +6,6 @@ import torch
 from torch.utils.data import Dataset
 from typing import Optional, Callable, Union
 import re
-from torch._six import string_classes
 import collections
 
 
@@ -172,7 +171,7 @@ def process_batch(batch, test=lambda x: False, func=lambda x: x):
         return {key: process_batch(batch[key], test, func) for key in batch}
     elif isinstance(batch, tuple) and hasattr(batch, '_fields'):  # namedtuple
         return elem_type(*(process_batch(d, test, func) for d in batch))
-    elif isinstance(batch, collections.abc.Sequence) and not isinstance(batch, string_classes):
+    elif isinstance(batch, collections.abc.Sequence) and not isinstance(batch, (str, bytes)):
         return [process_batch(d, test, func) for d in batch]
     else:
         return batch
