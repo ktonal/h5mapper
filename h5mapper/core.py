@@ -6,6 +6,7 @@ import os
 from typing import Optional
 from functools import reduce
 import tempfile
+import platform
 
 from .create import _create, _compute
 from .features import Feature, Array
@@ -347,7 +348,7 @@ class TypedFile:
                mode="w",
                schema={},
                n_workers=cpu_count(),
-               parallelism='mp',
+               parallelism="threads" if platform.machine().startswith("arm") else 'mp',
                keep_open=False,
                **h5_kwargs
                ):
