@@ -43,7 +43,7 @@ class Getter:
 
     n: Optional[int] = dtc.field(default=None, init=False)
 
-    def __call__(self, proxy, item):
+    def __call__(self, proxy, item, **kwargs):
         X = proxy[item]
         return X.copy() if isinstance(X, np.ndarray) else X
 
@@ -53,7 +53,7 @@ class Getter:
 
 class GetId(Getter):
 
-    def __call__(self, proxy, item):
+    def __call__(self, proxy, item, **kwargs):
         X = proxy[proxy.refs[item]]
         return X.copy() if isinstance(X, np.ndarray) else X
 
@@ -68,9 +68,11 @@ class AsSlice(Getter):
 
     def __post_init__(self):
         self.pre_slices = (slice(None),) * self.dim
+        self._len = None
 
-    def __call__(self, proxy, item):
-        i = item * self.downsampling
+    def __call__(self, proxy, item, jitter=0):
+        i = (item * self.downsampling) + jitter
+        i = max(min(len(self) * self.downsampling, i), 0)
         slc = slice(i + self.shift, i + self.shift + self.length)
         # !important!: .copy() prevent memory leaks in torch's Dataloader
         # see https://github.com/h5py/h5py/issues/2010
@@ -78,7 +80,9 @@ class AsSlice(Getter):
         return X.copy() if isinstance(X, np.ndarray) else X
 
     def __len__(self):
-        return (self.n - (abs(self.shift) + self.length) + 1) // self.downsampling
+        if self._len is None:
+            self._len = (self.n - (abs(self.shift) + self.length) + 1) // self.downsampling
+        return self._len
 
     def shift_and_length_to_samples(self, frame_length, hop_length, center=False):
         extra = -hop_length if center else \
@@ -106,8 +110,8 @@ class AsFramedSlice(AsSlice):
             _, self.length = self.shift_and_length_to_samples(
                 self.frame_size, self.hop_length, self.center)
 
-    def __call__(self, proxy, item):
-        sliced = super(AsFramedSlice, self).__call__(proxy, item)
+    def __call__(self, proxy, item, jitter=0):
+        sliced = super(AsFramedSlice, self).__call__(proxy, item, jitter=jitter)
         if self.center:
             sliced = np.pad(sliced, int(self.frame_size // 2), self.pad_mode)
         if isinstance(sliced, np.ndarray):
@@ -135,8 +139,8 @@ class Input:
     def __len__(self):
         return len(self.getter)
 
-    def __call__(self, item, file=None):
-        data = self.getter(self.data, item)
+    def __call__(self, item, file=None, jitter=0):
+        data = self.getter(self.data, item, jitter=jitter)
         if self.to_tensor:
             data = torch.from_numpy(data)
         return self.transform(data) if self.transform is not None else data
@@ -189,10 +193,11 @@ class ProgrammableDataset(Dataset):
     and should contain batch items (``h5m.Input`` or ``h5m.Target``).
     """
 
-    def __init__(self, file, batch=tuple()):
+    def __init__(self, file, batch=tuple(), sampling_jitter=0):
         super(Dataset, self).__init__()
         self.file = file
         self.N = float('inf')
+        self.jitter = sampling_jitter
 
         def initialize_items(item: Union[Input, Target]):
             if isinstance(item.data, str) and self.file is not None:
@@ -210,8 +215,14 @@ class ProgrammableDataset(Dataset):
         self.batch = process_batch(batch, _is_batchitem, initialize_items)
 
     def __getitem__(self, item):
+        if self.jitter > 0:
+            jitter = np.random.randint(-self.jitter, self.jitter, (1,))[0]
+        else:
+            jitter = 0
+
         def get_data(feat):
-            return feat(item)
+            return feat(item, jitter=jitter)
+
         return process_batch(tuple(self.batch), _is_batchitem, get_data)
 
     def __len__(self):
