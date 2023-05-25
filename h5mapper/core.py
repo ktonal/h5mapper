@@ -454,8 +454,8 @@ class TypedFile:
         h5f.visit(tostr)
         h5f.close()
 
-    def serve(self, batch, **loader_kwargs):
-        ds = ProgrammableDataset(self, batch)
+    def serve(self, batch, sampling_jitter=0, **loader_kwargs):
+        ds = ProgrammableDataset(self, batch, sampling_jitter=sampling_jitter)
         return DataLoader(ds, **loader_kwargs)
 
 

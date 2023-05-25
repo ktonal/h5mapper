@@ -1,0 +1,56 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "h5mapper"
+dynamic = ["version"]
+description = "pythonic ORM tool for reading and writing HDF5 data"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.6"
+authors = [
+    { name = "Antoine Daurat", email = "antoinedaurat@gmail.com" },
+]
+keywords = [
+    "ORM",
+    "deep-learning",
+    "h5py",
+    "hdf5",
+    "machine-learning",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Other Audience",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Programming Language :: Python :: 3.6",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+]
+dependencies = [
+    "dill",
+    "h5py>=3.0.0",
+    "ipython",
+    "multiprocess",
+    "numpy>=1.19.0",
+    "torch>=1.8.0",
+    "tqdm",
+]
+
+[project.scripts]
+image-bank = "h5mapper.typed_files:image_bank"
+sound-bank = "h5mapper.typed_files:sound_bank"
+
+[project.urls]
+Download = "https://github.com/ktonal/h5mapper"
+Homepage = "https://github.com/ktonal/h5mapper"
+
+[tool.hatch.version]
+path = "h5mapper/__init__.py"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/h5mapper",
+]
