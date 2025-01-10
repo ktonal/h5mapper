@@ -1,6 +1,5 @@
 import dataclasses as dtc
 
-import librosa
 import numpy as np
 import torch
 from torch.utils.data import Dataset
@@ -115,7 +114,7 @@ class AsFramedSlice(AsSlice):
         if self.center:
             sliced = np.pad(sliced, int(self.frame_size // 2), self.pad_mode)
         if isinstance(sliced, np.ndarray):
-            return librosa.util.frame(sliced, frame_length=self.frame_size, hop_length=self.hop_length, axis=0)
+            return np.lib.stride_tricks.sliding_window_view(sliced, window_shape=self.frame_size, axis=0)[::self.hop_length]
         else:
             return sliced.unfold(0, self.frame_size, self.hop_length)
 
@@ -124,7 +123,7 @@ class AsFramedSlice(AsSlice):
 class Input:
     """read and transform data from a specific key/proxy in a .h5 file"""
     data: Union[str, np.ndarray, "Proxy"] = None
-    getter: Getter = Getter()
+    getter: Getter = dtc.field(default_factory=Getter)
     setter: Optional[Setter] = None
     transform: Optional[Callable[[np.ndarray], np.ndarray]] = None
     to_tensor: bool = False
@@ -152,7 +151,7 @@ class Input:
 @dtc.dataclass
 class Target:
     data: Union[str, np.ndarray, "Proxy"] = ''
-    setter: Setter = Setter()
+    setter: Setter = dtc.field(default_factory=Setter)
     transform: Optional[Callable[[np.ndarray], np.ndarray]] = None
 
     def __call__(self, item, value, file=None):

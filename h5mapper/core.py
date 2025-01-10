@@ -274,9 +274,7 @@ class Proxy:
         """
         apply `fdict` to each of self's sources and store the result in `destination`
         """
-        _compute(fdict, self, parallelism, n_workers,
-                 self.owner if destination is None else destination)
-        return destination
+        return _compute(fdict, self, parallelism, n_workers, destination)
 
     def serve(self, batch, **loader_kwargs):
         return self.owner.serve(batch, **loader_kwargs)
@@ -376,7 +374,7 @@ class TypedFile:
     def load(cls, source, schema={}):
         if not schema:
             schema = {attr: val for attr, val in cls.__dict__.items() if isinstance(val, Feature)}
-        return _load(source, schema, guard_func=Feature.load)
+        return _load(source, schema)
 
     def _attach_new_children(self, data, handle):
         for new in data.keys():

@@ -18,7 +18,7 @@ SRC_KEY = "__src__"
 REF_KEY = "__ref__"
 
 
-def _load(source, schema={}, guard_func=None):
+def _load(source, schema={}):
     """
     extract data from a source according to a schema.
 
@@ -41,9 +41,6 @@ def _load(source, schema={}, guard_func=None):
         the input to be loaded (the path to a file, an url, ...)
     schema : dict
         must have strings as keys (names of the H5 objects) and Features as values
-    guard_func : optional callable
-        Array whose load is equal to ``guard_func`` are by-passed.
-        Typically, `guard_func` is the method of an abstract base class.
 
     Returns
     -------
@@ -53,7 +50,7 @@ def _load(source, schema={}, guard_func=None):
     out = {key: None for key in schema.keys()}
 
     for feat_name, feature in schema.items():
-        if not getattr(type(feature), 'load', guard_func) != guard_func:
+        if not hasattr(type(feature), 'load'):
             # object doesn't implement load()
             out.pop(feat_name)
             continue

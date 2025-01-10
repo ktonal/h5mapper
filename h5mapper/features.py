@@ -109,7 +109,7 @@ class Group(Feature):
         self.features = features
 
     def load(self, source):
-        return _load(source, self.features, guard_func=Feature.load)
+        return _load(source, self.features)
 
     def after_create(self, db, feature_key):
         for feat in self.features.values():

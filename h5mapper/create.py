@@ -17,17 +17,18 @@ if shell in ('ZMQInteractiveShell', "Shell"):
 else:
     from tqdm import tqdm
 
-
 __all__ = [
     "_create",
     '_compute',
+    "for_each",
+    "tqdm"
 ]
 
 
 class SerialExecutor:
-    def map(self, func, iterable):
+    def imap(self, func, iterable, **kwargs):
         return map(func, iterable)
-
+    map = imap
     def __enter__(self):
         return self
 
@@ -46,11 +47,29 @@ def get_executor(n_workers=cpu_count(), parallelism='mp'):
         executor = Pool(n_workers)
     elif parallelism == 'threads':
         executor = ThreadPoolExecutor(n_workers)
+        # dirty hack...
+        executor.imap = executor.map
     elif parallelism == 'none':
         executor = SerialExecutor()
     else:
         raise ValueError(f"parallelism must be one of ['mp', 'threads', 'none']. Got '{parallelism}'")
     return executor
+
+
+def for_each(iterable, f, parallelism="mp", n_workers=cpu_count(), chunksize=None, **tqdm_kwargs):
+    executor = get_executor(n_workers, parallelism)
+    if chunksize is None:
+        chunksize = max(len(iterable)//n_workers, 1)
+    try:
+        for result in tqdm(executor.imap(f, iterable, chunksize=chunksize), **tqdm_kwargs):
+            yield result
+    except Exception as e:
+        if parallelism == 'mp':
+            executor.terminate()
+        raise e
+    if parallelism == 'mp':
+        executor.close()
+        executor.join()
 
 
 def _create(cls,
@@ -78,44 +97,26 @@ def _create(cls,
         if key not in f:
             f.create_group(key)
     f.flush()
-
     # initialize ds_kwargs from schema
     ds_kwargs = {key: getattr(feature, "__ds_kwargs__", {}).copy() for key, feature in schema.items()}
-    # get flavour of parallelism
-    try:
-        executor = get_executor(n_workers, parallelism)
-    except ValueError as e:
-        f.close()
-        raise e
+
     # run loading routine
-    n_sources = len(sources)
-    batch_size = n_workers * 1
     refed_paths = set()
-    for i in tqdm(range(1 + n_sources // batch_size),
-                  leave=True, desc="Extracting Files", unit="batch"):
-        start_loc = max([i * batch_size, 0])
-        end_loc = min([(i + 1) * batch_size, n_sources])
-        this_sources = sources[start_loc:end_loc]
-        try:
-            results = executor.map(partial(_load, schema=schema, guard_func=Feature.load), this_sources)
-        except Exception as e:
-            f.close()
-            if mode == "w":
-                os.remove(filename)
-            if parallelism == 'mp':
-                executor.terminate()
-            raise e
-        # write results
-        for n, res in enumerate(results):
-            if not res:
+    func = partial(_load, schema=schema)
+    try:
+        for i, result in enumerate(for_each(sources, func, parallelism, n_workers, chunksize=1, leave=True, desc="Extracting Files", unit="file", total=len(sources))):
+            if not result:
                 continue
-            res = flatten_dict(res)
-            _add.source(f, this_sources[n], res, ds_kwargs, refed_paths)
-            refed_paths = refed_paths | set(res.keys())
+            result = flatten_dict(result)
+            _add.source(f, sources[i], result, ds_kwargs, refed_paths)
+            refed_paths = refed_paths | set(result.keys())
         f.flush()
-    if parallelism == 'mp':
-        executor.close()
-        executor.join()
+    except Exception as e:
+        f.close()
+        if mode == "w":
+            os.remove(filename)
+        raise e
+
     # run after_create
     db = cls(filename, mode="r+", keep_open=True)
     for key, feature in schema.items():
@@ -136,6 +137,7 @@ def _compute(fdict, proxy, parallelism, n_workers, destination):
     executor = get_executor(n_workers, parallelism)
     n_sources = len(sources)
     batch_size = n_workers * 1
+    out = {}
     for i in tqdm(range(1 + n_sources // batch_size), leave=False):
         start_loc = max([i * batch_size, 0])
         end_loc = min([(i + 1) * batch_size, n_sources])
@@ -147,8 +149,11 @@ def _compute(fdict, proxy, parallelism, n_workers, destination):
         else:
             raise NotImplementedError
         for src, r in res:
-            destination.add(src, r)
+            if destination is None:
+                out.update({src: r})
+            else:
+                destination.add(src, r)
     if parallelism == 'mp':
         executor.close()
         executor.join()
-    return
+    return out if destination is None else destination
